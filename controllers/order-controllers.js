@@ -5,6 +5,7 @@ import { sendOrderConfirmationEmail } from "./email-controller.js";
 import User from "../models/userModel.js";
 import cloudinary from "../config/cloudinary.js";
 import { Readable } from "stream";
+import { console } from "inspector";
 
 const uploadToCloudinary = (fileBuffer, folderName) => {
   return new Promise((resolve, reject) => {
@@ -97,4 +98,40 @@ const orderForm = async (req, res) => {
   }
 };
 
-export default orderForm;
+const getUserOrders = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const userEmail = req.user.email;
+
+    console.log('User ID:', userId);
+    console.log('User Email:', userEmail);
+
+    const orders = await Order.find({
+      $or: [
+        { user: userId },
+        { email: userEmail }
+      ]
+    })
+      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const enhancedOrders = orders.map((order) => ({
+      ...order,
+      filesList: order.files?.length > 0 ? order.files.map(f => f.name).join(', ') : 'None',
+    }));
+
+    res.status(200).json({
+      error: false,
+      message: 'User orders fetched successfully',
+      data: enhancedOrders,
+    });
+  } catch (error) {
+    console.error('Error fetching user orders:', error);
+    res.status(500).json({ error: true, message: 'Failed to fetch user orders' });
+  }
+};
+
+
+
+export { orderForm, getUserOrders };

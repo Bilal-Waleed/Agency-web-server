@@ -2,7 +2,8 @@ import User from "../models/userModel.js";
 import Order from "../models/orderModel.js";
 import Contact from "../models/contactModel.js";
 import Service from "../models/serviceModel.js";
-import ScheduledMeeting from "../models/scheduledMeetingModel.js"; // ✅ NEW IMPORT
+import ScheduledMeeting from "../models/scheduledMeetingModel.js";
+import CancelRequest from "../models/cancelRequestModel.js";
 
 export const setupChangeStream = (io) => {
   const collections = [
@@ -10,7 +11,8 @@ export const setupChangeStream = (io) => {
     { model: Order, event: "orderChange" },
     { model: Contact, event: "contactChange" },
     { model: Service, event: "serviceChange" },
-    { model: ScheduledMeeting, event: "meetingChange" }, // ✅ NEW ENTRY
+    { model: ScheduledMeeting, event: "meetingChange" },
+    { model: CancelRequest, event: "cancelRequestChange" },
   ];
 
   // Track change streams for cleanup
@@ -136,7 +138,7 @@ export const setupChangeStream = (io) => {
         }
       }
 
-      // ----------------- SCHEDULED MEETING CHANGES (NEW) -----------------
+      // ----------------- SCHEDULED MEETING CHANGES -----------------
       if (event === "meetingChange") {
         const meetingId = change.documentKey._id;
 
@@ -164,6 +166,44 @@ export const setupChangeStream = (io) => {
         }
       }
 
+      // ----------------- CANCEL REQUEST CHANGES -----------------
+      if (event === "cancelRequestChange") {
+        const requestId = change.documentKey._id;
+
+        if (change.operationType === "insert") {
+          try {
+            const cancelRequest = await model.findById(requestId)
+              .populate({
+                path: 'order',
+                populate: { path: 'user', select: 'name email avatar' },
+                select: 'name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar',
+              })
+              .lean();
+
+            if (cancelRequest) {
+              const enhancedRequest = {
+                ...cancelRequest,
+                order: {
+                  ...cancelRequest.order,
+                  filesList: cancelRequest.order.files?.length > 0 ? cancelRequest.order.files.map(f => f.name).join(', ') : 'None',
+                },
+              };
+              io.to("adminRoom").emit("cancelRequestChange", {
+                operationType: "insert",
+                fullDocument: enhancedRequest,
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching cancel request for insert:`, error);
+          }
+
+        } else if (change.operationType === "delete") {
+          io.to("adminRoom").emit("cancelRequestChange", {
+            operationType: "delete",
+            documentKey: { _id: requestId },
+          });
+        }
+      }
     });
 
     changeStream.on("error", (error) => {

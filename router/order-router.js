@@ -1,12 +1,13 @@
 import express from 'express';
-import orderForm from '../controllers/order-controllers.js';
+import {orderForm, getUserOrders }from '../controllers/order-controllers.js';
 import multer from 'multer';
-import isAdminMiddleware from '../middleware/isAdminMiddleware.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
-router.post('/', isAdminMiddleware, upload.array('files'), orderForm);
+router.post('/', authMiddleware, upload.array('files'), orderForm);
+router.get('/user', authMiddleware, getUserOrders);
 
 export default router;

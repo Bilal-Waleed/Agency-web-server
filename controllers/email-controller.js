@@ -183,6 +183,50 @@ const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, da
   await transporter.sendMail(mailOptions);
 };
 
+const sendCancelRequestAcceptedEmail = async (email, name, orderId) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: "Order Cancellation Request Accepted - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>We have reviewed your cancellation request for Order ID: ${orderId} and are pleased to inform you that it has been accepted.</p>
+        <p>Your order has been successfully canceled, and any associated files have been removed from our system. If you have made any payments, our team will contact you regarding refund processing, if applicable.</p>
+        <p>We value your feedback and hope to serve you again in the future. If you have any questions or need further assistance, please feel free to contact us.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+const sendCancelRequestDeclinedEmail = async (email, name, orderId) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: "Order Cancellation Request Declined - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>We have reviewed your cancellation request for Order ID: ${orderId}, and we regret to inform you that it has been declined.</p>
+        <p>The reason for the decline is that more than 50% of the project work has been completed. As per our policy, cancellations are not permitted at this stage to ensure fairness and resource allocation.</p>
+        <p>Our team will continue to work on your project to ensure timely delivery. If you have any concerns or need further clarification, please contact us.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 export {
   sendContactEmail,
   sendOrderConfirmationEmail,
@@ -191,4 +235,6 @@ export {
   sendScheduledMeetingEmail,
   sendMeetingAcceptedEmail,
   sendMeetingRescheduledEmail,
+  sendCancelRequestAcceptedEmail,
+  sendCancelRequestDeclinedEmail,
 };
