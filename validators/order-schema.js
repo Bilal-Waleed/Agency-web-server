@@ -3,7 +3,10 @@ import z from 'zod';
 const orderSchema = z.object({
     name: z.string().min(3, 'Name must be at least 3 characters').max(50, 'Name must be less than 50 characters'),
     email: z.string().email('Invalid email address').min(1, 'Email is required').max(100, 'Email must be less than 100 characters'),
-    phone: z.string().regex(/^\+?[1-9]\d{7,14}$/, 'Invalid international phone number'),
+    phone: z.string().regex(
+        /^(\+?\d{1,4})?[\s.-]?(\(?\d{2,4}\)?[\s.-]?)?[\d\s.-]{6,12}$/,
+        'Invalid phone number'
+        ),
     projectType: z.enum(['Website', 'Mobile App', 'UI/UX', 'SEO', 'Bug Fixing', 'Wordpress'],
         {errorMap: () => ({ message: 'Project type is required' })}
     ),

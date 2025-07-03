@@ -56,10 +56,11 @@ const orderForm = async (req, res) => {
           name: file.originalname,
           url: result.url,
           type: file.mimetype,
+          public_id: result.public_id,
         };
       } catch (error) {
         console.error(`Error uploading file ${file.originalname} to Cloudinary:`, error.message);
-        return null; // Skip failed uploads
+        return null; 
       }
     });
 
@@ -112,7 +113,7 @@ const getUserOrders = async (req, res) => {
         { email: userEmail }
       ]
     })
-      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar')
+      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar')
       .sort({ createdAt: -1 })
       .lean();
 
