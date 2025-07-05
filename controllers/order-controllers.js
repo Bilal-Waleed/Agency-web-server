@@ -45,10 +45,9 @@ const orderForm = async (req, res) => {
     }
 
     const files = req.files || [];
-    const timestamp = Date.now(); // Unique timestamp for folder
-    const folderName = `orders/${user.name}_${timestamp}`; // e.g., orders/JohnDoe_16987654321
+    const timestamp = Date.now(); 
+    const folderName = `orders/${user.name.replace(/\s+/g, '_')}_${timestamp}`;
 
-    // Upload files to Cloudinary in parallel
     const fileUploads = files.map(async (file) => {
       try {
         const result = await uploadToCloudinary(file.buffer, folderName);

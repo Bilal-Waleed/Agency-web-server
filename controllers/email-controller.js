@@ -26,6 +26,7 @@ const sendContactEmail = async (email, name) => {
         <p>Our team is currently reviewing your inquiry, and we will get back to you as soon as possible with a detailed response. We are committed to delivering high-quality solutions tailored to your needs.</p>
         <p>In the meantime, feel free to explore our portfolio or contact us for any urgent queries.</p>
         <p>Best regards,</p>
+       rest regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
         Email: boldzyt.ds@gmail.com<br>
         Website: www.boldzytdigital.com</p>
@@ -227,6 +228,29 @@ const sendCancelRequestDeclinedEmail = async (email, name, orderId) => {
   await transporter.sendMail(mailOptions);
 };
 
+const sendAdminCancelOrderEmail = async (email, name, orderId, reason) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: "Order Cancelled by Admin - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>We regret to inform you that your order (Order ID: ${orderId}) has been cancelled by our administrative team.</p>
+        <p><strong>Reason for Cancellation:</strong> ${reason}</p>
+        <p>Any associated files have been removed from our system. If you have made any payments, our team will contact you regarding refund processing, if applicable.</p>
+        <p>We apologize for any inconvenience caused and value your understanding. If you have any questions or need further assistance, please feel free to contact us.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 export {
   sendContactEmail,
   sendOrderConfirmationEmail,
@@ -237,4 +261,5 @@ export {
   sendMeetingRescheduledEmail,
   sendCancelRequestAcceptedEmail,
   sendCancelRequestDeclinedEmail,
+  sendAdminCancelOrderEmail,
 };

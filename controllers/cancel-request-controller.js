@@ -1,8 +1,8 @@
 import CancelRequest from "../models/cancelRequestModel.js";
 import Order from "../models/orderModel.js";
-import { sendCancelRequestAcceptedEmail, sendCancelRequestDeclinedEmail } from "./email-controller.js";
+import User from "../models/userModel.js";
+import { sendCancelRequestAcceptedEmail, sendCancelRequestDeclinedEmail, sendAdminCancelOrderEmail } from "./email-controller.js";
 import cloudinary from "../config/cloudinary.js";
-
 
 const createCancelRequest = async (req, res) => {
   try {
@@ -29,7 +29,7 @@ const createCancelRequest = async (req, res) => {
 
     const cancelRequest = new CancelRequest({
       order: orderId,
-      user: req.user._id, 
+      user: req.user._id,
       reason,
     });
 
@@ -82,16 +82,16 @@ const getCancelRequests = async (req, res) => {
   }
 };
 
-const getCloudinaryResourceType = (file) => {
-  if (!file?.url) return 'image'; 
+// const getCloudinaryResourceType = (file) => {
+//   if (!file?.url) return 'image';
 
-  const url = file.url;
-  if (url.includes('/image/upload/')) return 'image';
-  if (url.includes('/video/upload/')) return 'video';
-  if (url.includes('/raw/upload/')) return 'raw';
-  
-  return 'image'; 
-};
+//   const url = file.url;
+//   if (url.includes('/image/upload/')) return 'image';
+//   if (url.includes('/video/upload/')) return 'video';
+//   if (url.includes('/raw/upload/')) return 'raw';
+
+//   return 'image';
+// };
 
 const acceptCancelRequest = async (req, res) => {
   try {
@@ -115,25 +115,20 @@ const acceptCancelRequest = async (req, res) => {
     const { order, user } = cancelRequest;
 
     if (order.files?.length > 0) {
-      console.log("📦 Total Files to delete:", order.files.length);
+      console.log("Total Files to delete:", order.files.length);
 
-      for (const file of order.files) {
-        console.log("🧾 Deleting file:", file);
+      const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
 
-        const resourceType = getCloudinaryResourceType(file);
+      console.log("Folder to delete:", folderPrefix);
 
-        if (file.public_id) {
-          try {
-            const result = await cloudinary.uploader.destroy(file.public_id, {
-              resource_type: resourceType,
-            });
-            console.log(`✅ Deleted (${resourceType}) via public_id:`, result);
-          } catch (error) {
-            console.error(`❌ Failed to delete (${resourceType}) ${file.public_id}:`, error.message);
-          }
-        } else {
-          console.warn("⚠️ Skipped (no public_id):", file.name);
-        }
+      try {
+        const deletedResources = await cloudinary.api.delete_resources_by_prefix(folderPrefix);
+        console.log("Deleted resources by prefix:", deletedResources);
+
+        const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
+        console.log("Deleted folder:", deletedFolder);
+      } catch (err) {
+        console.error("Error deleting folder or resources:", err.message);
       }
     }
 
@@ -143,9 +138,8 @@ const acceptCancelRequest = async (req, res) => {
     await sendCancelRequestAcceptedEmail(user.email, user.name, order._id);
 
     res.status(200).json({ error: false, message: "Cancel request accepted and order deleted" });
-
   } catch (error) {
-    console.error("❌ Error accepting cancel request:", error);
+    console.error("Error accepting cancel request:", error);
     res.status(500).json({ error: true, message: "Failed to accept cancel request", details: error.message });
   }
 };
@@ -176,4 +170,52 @@ const declineCancelRequest = async (req, res) => {
   }
 };
 
-export { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest };
+const cancelOrderByAdmin = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { reason } = req.body;
+
+    if (!orderId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: true, message: "Invalid order ID format" });
+    }
+
+    const order = await Order.findById(orderId).populate('user');
+    if (!order) {
+      return res.status(404).json({ error: true, message: "Order not found" });
+    }
+
+    let user = order.user;
+
+    if (!user && order.email) {
+      user = await User.findOne({ email: order.email });
+      if (!user) {
+        console.warn("User not found by email. Proceeding with fallback.");
+      }
+    }
+
+    const userName = user?.name || order.name;
+    const userEmail = user?.email || order.email ;
+
+    if (order.files?.length > 0) {
+      const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
+      try {
+        await cloudinary.api.delete_resources_by_prefix(folderPrefix);
+        await cloudinary.api.delete_folder(folderPrefix);
+      } catch (err) {
+        console.error("Error deleting Cloudinary resources:", err.message);
+      }
+    }
+
+    await sendAdminCancelOrderEmail(userEmail, userName, orderId, reason);
+
+    await Order.findByIdAndDelete(orderId);
+
+    res.status(200).json({ error: false, message: "Order cancelled successfully" });
+  } catch (error) {
+    console.error("Error cancelling order by admin:", error);
+    res.status(500).json({ error: true, message: "Failed to cancel order", details: error.message });
+  }
+};
+
+
+export { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest, cancelOrderByAdmin };

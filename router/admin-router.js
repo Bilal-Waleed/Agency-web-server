@@ -10,7 +10,7 @@ import {
   deleteService,
   toggleAdminStatus
 } from "../controllers/admin-controller.js";
-import { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest } from "../controllers/cancel-request-controller.js";
+import { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest, cancelOrderByAdmin } from "../controllers/cancel-request-controller.js";
 import { createService, getServices } from "../controllers/service-controllers.js";
 import { downloadOrder } from "../controllers/download-controller.js";
 import upload from "../config/multer.js";
@@ -26,6 +26,7 @@ router.delete("/users", isAdminMiddleware, deleteUsers);
 router.get("/contacts", isAdminMiddleware, getContacts);
 router.get('/orders', isAdminMiddleware, getOrders);
 router.get("/orders/:id/download", isAdminMiddleware, downloadOrder);
+router.post("/orders/:id/cancel", authMiddleware, isAdminMiddleware, cancelOrderByAdmin);
 router.get("/cancel-requests", authMiddleware, isAdminMiddleware, getCancelRequests);
 router.post("/cancel-requests/:id/accept", authMiddleware, isAdminMiddleware, acceptCancelRequest);
 router.post("/cancel-requests/:id/decline", authMiddleware, isAdminMiddleware, declineCancelRequest);
