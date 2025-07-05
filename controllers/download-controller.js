@@ -182,24 +182,19 @@ const downloadOrder = async (req, res) => {
     const docBuffer = await Packer.toBuffer(doc);
     zip.addFile("order_details.docx", docBuffer);
 
-    // Fetch and add images to ZIP
-    if (order.files?.length > 0) {
-      for (let i = 0; i < order.files.length; i++) {
-        const file = order.files[i];
-        if (file.url) {
-          try {
-            const response = await axios.get(file.url, { responseType: 'arraybuffer' });
-            const extension = file.name.split('.').pop() || 'jpg';
-            zip.addFile(`image_${i + 1}.${extension}`, Buffer.from(response.data));
-          } catch (error) {
-            console.error(`Error fetching image ${file.name}:`, error.message);
-            // Skip failed images to ensure ZIP is created
-          }
+    for (let i = 0; i < order.files.length; i++) {
+      const file = order.files[i];
+      if (file.url && file.name) {
+        try {
+          const response = await axios.get(file.url, { responseType: 'arraybuffer' });
+          zip.addFile(file.name, Buffer.from(response.data)); 
+        } catch (error) {
+          console.error(`Error fetching file ${file.name}:`, error.message);
         }
       }
     }
 
-    // Generate ZIP buffer
+
     const zipBuffer = zip.toBuffer();
 
     // Set response headers for download
