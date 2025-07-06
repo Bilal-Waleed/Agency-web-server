@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { Server } from "socket.io";
 import http from "http";
-import { setupChangeStream } from "./socket/adminChangeStream.js"; 
+import { setupChangeStream } from "./socket/changeStream.js"; 
 import adminRouter from "./router/admin-router.js";
 import scheduledMeetingRouter from './router/scheduledMeeting-router.js';
 

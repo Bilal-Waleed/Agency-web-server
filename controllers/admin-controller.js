@@ -58,7 +58,18 @@ const refreshToken = async (req, res) => {
 
 const getDashboardData = async (req, res) => {
   try {
+    const days = parseInt(req.query.days) || 15;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const matchStage = {
+      $match: {
+        createdAt: { $gte: startDate }
+      }
+    };
+
     const dailyOrders = await Order.aggregate([
+      matchStage,
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -69,6 +80,7 @@ const getDashboardData = async (req, res) => {
     ]);
 
     const dailyUsers = await User.aggregate([
+      matchStage,
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -79,6 +91,7 @@ const getDashboardData = async (req, res) => {
     ]);
 
     const dailyContacts = await Contact.aggregate([
+      matchStage,
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -89,6 +102,7 @@ const getDashboardData = async (req, res) => {
     ]);
 
     const serviceOrders = await Order.aggregate([
+      matchStage,
       {
         $group: {
           _id: "$projectType",
@@ -102,7 +116,7 @@ const getDashboardData = async (req, res) => {
           _id: 0,
         },
       },
-      { $sort: { count: -1 } }
+      { $sort: { count: -1 } },
     ]);
 
     res.status(200).json({
@@ -112,7 +126,7 @@ const getDashboardData = async (req, res) => {
         monthlyOrders: dailyOrders,
         monthlyUsers: dailyUsers,
         monthlyContacts: dailyContacts,
-        serviceOrders
+        serviceOrders,
       },
     });
   } catch (error) {
