@@ -174,14 +174,6 @@ export const setupChangeStream = (io) => {
             console.error("Error fetching meeting:", err);
           }
         } else if (change.operationType === "delete") {
-          io.to("adminRoom").emit("meetingChange", {
-            operationType: "delete",
-            documentKey: { _id: meetingId },
-          });
-          await saveNotification("meeting", {
-            operationType: "delete",
-            documentKey: { _id: meetingId },
-          });
         }
       }
 

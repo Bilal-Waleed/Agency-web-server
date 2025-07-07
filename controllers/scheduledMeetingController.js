@@ -6,6 +6,32 @@ import {
   sendMeetingRescheduledEmail
 } from '../controllers/email-controller.js';
 
+const deleteExpiredMeetings = async (io) => {
+  try {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
+
+    const expiredMeetings = await ScheduledMeeting.find({
+      $expr: {
+        $lt: [
+          { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+          oneHourAgo,
+        ],
+      },
+    });
+
+    for (const meeting of expiredMeetings) {
+      await ScheduledMeeting.deleteOne({ _id: meeting._id });
+      io.to('adminRoom').emit('meetingDeleted', meeting._id);
+    }
+
+    return expiredMeetings.length;
+  } catch (error) {
+    console.error('Failed to delete expired meetings:', error.message);
+    return 0;
+  }
+};
+
 const createScheduledMeeting = async (req, res) => {
   try {
     const { userId, serviceId, date, time } = req.body;
@@ -37,8 +63,24 @@ const createScheduledMeeting = async (req, res) => {
       });
     }
 
-    // Save meeting
-    const meeting = new ScheduledMeeting({ user: userId, service: serviceId, date, time });
+    // Fetch user details
+    const user = await User.findById(userId).select('name email avatar');
+    if (!user) {
+      return res.status(404).send({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const meeting = new ScheduledMeeting({
+      user: userId,
+      userEmail: user.email,
+      userName: user.name,
+      userAvatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`, // Fallback to ui-avatars
+      service: serviceId,
+      date,
+      time,
+    });
     await meeting.save();
 
     const populatedMeeting = await ScheduledMeeting.findById(meeting._id)
@@ -51,16 +93,14 @@ const createScheduledMeeting = async (req, res) => {
       data: populatedMeeting,
     });
 
-    // Emit socket event
     io.to('adminRoom').emit('meetingChange', populatedMeeting);
 
-    // Send emails in background
     const admins = await User.find({ isAdmin: true }, 'email name');
     admins.forEach((admin) => {
       sendScheduledMeetingEmail(
         admin.email,
         admin.name,
-        populatedMeeting.user.name,
+        populatedMeeting.userName || populatedMeeting.user?.name,
         populatedMeeting.service.title,
         date,
         time
@@ -69,6 +109,7 @@ const createScheduledMeeting = async (req, res) => {
       );
     });
 
+    await deleteExpiredMeetings(io);
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -78,25 +119,51 @@ const createScheduledMeeting = async (req, res) => {
   }
 };
 
-// GET MEETINGS
 const getScheduledMeetings = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-    const meetings = await ScheduledMeeting.find()
+    const meetings = await ScheduledMeeting.find({
+      $expr: {
+        $gte: [
+          { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+          oneHourAgo,
+        ],
+      },
+    })
       .populate('user', 'name email avatar')
       .populate('service', 'title')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
-    const total = await ScheduledMeeting.countDocuments();
+    const formattedMeetings = meetings.map((meeting) => ({
+      ...meeting._doc,
+      user: meeting.user
+        ? { name: meeting.user.name, email: meeting.user.email, avatar: meeting.user.avatar }
+        : {
+            name: meeting.userName,
+            email: meeting.userEmail,
+            avatar: meeting.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(meeting.userName)}`,
+          },
+    }));
+
+    const total = await ScheduledMeeting.countDocuments({
+      $expr: {
+        $gte: [
+          { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+          oneHourAgo,
+        ],
+      },
+    });
     const totalPages = Math.ceil(total / limit);
 
     res.status(200).send({
       success: true,
       message: 'Meetings fetched successfully',
-      data: meetings,
+      data: formattedMeetings,
       totalPages,
     });
   } catch (error) {
@@ -108,13 +175,12 @@ const getScheduledMeetings = async (req, res) => {
   }
 };
 
-// ACCEPT MEETING
 const acceptMeeting = async (req, res) => {
   try {
     const io = req.app.get('io');
 
     const meeting = await ScheduledMeeting.findById(req.params.id)
-      .populate('user', 'name email')
+      .populate('user', 'name email avatar')
       .populate('service', 'title');
 
     if (!meeting) {
@@ -133,8 +199,8 @@ const acceptMeeting = async (req, res) => {
     io.to('adminRoom').emit('meetingChange', meeting);
 
     sendMeetingAcceptedEmail(
-      meeting.user.email,
-      meeting.user.name,
+      meeting.userEmail || meeting.user?.email,
+      meeting.userName || meeting.user?.name,
       meeting.service.title,
       meeting.date,
       meeting.time
@@ -142,6 +208,7 @@ const acceptMeeting = async (req, res) => {
       console.error('Failed to send accepted email:', err.message)
     );
 
+    await deleteExpiredMeetings(io);
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -151,7 +218,6 @@ const acceptMeeting = async (req, res) => {
   }
 };
 
-// RESCHEDULE MEETING
 const rescheduleMeeting = async (req, res) => {
   try {
     const { date, time } = req.body;
@@ -199,7 +265,7 @@ const rescheduleMeeting = async (req, res) => {
     await meeting.save();
 
     const populatedMeeting = await ScheduledMeeting.findById(meeting._id)
-      .populate('user', 'name email')
+      .populate('user', 'name email avatar')
       .populate('service', 'title');
 
     res.status(200).send({
@@ -211,8 +277,8 @@ const rescheduleMeeting = async (req, res) => {
     io.to('adminRoom').emit('meetingChange', populatedMeeting);
 
     sendMeetingRescheduledEmail(
-      populatedMeeting.user.email,
-      populatedMeeting.user.name,
+      populatedMeeting.userEmail || populatedMeeting.user?.email,
+      populatedMeeting.userName || populatedMeeting.user?.name,
       populatedMeeting.service.title,
       date,
       time
@@ -220,6 +286,7 @@ const rescheduleMeeting = async (req, res) => {
       console.error('Failed to send rescheduled email:', err.message)
     );
 
+    await deleteExpiredMeetings(io);
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -233,5 +300,6 @@ export {
   createScheduledMeeting,
   getScheduledMeetings,
   acceptMeeting,
-  rescheduleMeeting
+  rescheduleMeeting,
+  deleteExpiredMeetings
 };
