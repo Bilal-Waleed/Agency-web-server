@@ -42,7 +42,7 @@ const createScheduledMeeting = async (req, res) => {
     await meeting.save();
 
     const populatedMeeting = await ScheduledMeeting.findById(meeting._id)
-      .populate('user', 'name email')
+      .populate('user', 'name email avatar')
       .populate('service', 'title');
 
     res.status(201).send({

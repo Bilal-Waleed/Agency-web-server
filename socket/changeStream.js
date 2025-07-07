@@ -4,6 +4,7 @@ import Contact from "../models/contactModel.js";
 import Service from "../models/serviceModel.js";
 import ScheduledMeeting from "../models/scheduledMeetingModel.js";
 import CancelRequest from "../models/cancelRequestModel.js";
+import Notification from "../models/notificationModel.js";
 
 export const setupChangeStream = (io) => {
   const collections = [
@@ -15,12 +16,25 @@ export const setupChangeStream = (io) => {
     { model: CancelRequest, event: "cancelRequestChange" },
   ];
 
-  // Track change streams for cleanup
   const changeStreams = collections.map(({ model, event }) => {
     const changeStream = model.watch();
 
     changeStream.on("change", async (change) => {
       console.log(`Change detected in ${model.modelName}:`, change);
+
+      const saveNotification = async (type, data) => {
+        try {
+          await Notification.create({
+            type,
+            data,
+            createdAt: new Date(),
+            viewed: false,
+          });
+          console.log(`Saved ${type} notification:`, data);
+        } catch (error) {
+          console.error(`Error saving ${type} notification:`, error);
+        }
+      };
 
       // ----------------- USER CHANGES -----------------
       if (event === "userChange") {
@@ -32,10 +46,9 @@ export const setupChangeStream = (io) => {
             documentKey: { _id: userId },
             userId,
           };
-
           io.to(`user:${userId}`).emit("userChange", payload);
           io.to("adminRoom").emit("userChange", payload);
-
+          await saveNotification("user", payload);
         } else if (change.operationType === "insert") {
           try {
             const newUser = await model.findById(userId).select("_id name email avatar isAdmin createdAt");
@@ -46,11 +59,11 @@ export const setupChangeStream = (io) => {
                 userId,
               };
               io.to("adminRoom").emit("userChange", payload);
+              await saveNotification("user", payload);
             }
           } catch (err) {
             console.error("Error fetching inserted user:", err);
           }
-
         } else if (change.operationType === "update") {
           try {
             const updatedUser = await model.findById(userId).select("_id name email avatar isAdmin createdAt");
@@ -63,6 +76,7 @@ export const setupChangeStream = (io) => {
               };
               io.to(`user:${userId}`).emit("userChange", payload);
               io.to("adminRoom").emit("userChange", payload);
+              await saveNotification("user", payload);
             }
           } catch (err) {
             console.error("Error fetching updated user:", err);
@@ -76,7 +90,12 @@ export const setupChangeStream = (io) => {
           const contactId = change.documentKey._id;
           const contact = await model.findById(contactId).select("name email message createdAt avatar");
           if (contact) {
-            io.to("adminRoom").emit(event, contact);
+            const payload = {
+              operationType: change.operationType,
+              ...contact.toObject(),
+            };
+            io.to("adminRoom").emit(event, payload);
+            await saveNotification("contact", payload);
           }
         } catch (error) {
           console.error(`Error in contactChange:`, error);
@@ -89,52 +108,50 @@ export const setupChangeStream = (io) => {
 
         if (change.operationType === "insert") {
           io.emit("serviceCreated", change.fullDocument);
-
+          await saveNotification("service", change.fullDocument);
         } else if (change.operationType === "update") {
           try {
             const updatedService = await model.findById(serviceId);
             if (updatedService) {
               io.emit("serviceUpdated", updatedService);
+              await saveNotification("service", updatedService);
             }
           } catch (err) {
             console.error("Error fetching updated service:", err);
           }
-
         } else if (change.operationType === "delete") {
           io.emit("serviceDeleted", { id: serviceId });
+          await saveNotification("service", { id: serviceId, operationType: "delete" });
         }
       }
 
       // ----------------- ORDER CHANGES -----------------
-      if (event === "orderChange") {
-        const orderId = change.documentKey._id;
+      if (event === "orderChange" && change.operationType === "insert") {
+        try {
+          const orderId = change.documentKey._id;
+          const order = await model.findById(orderId)
+            .populate("user", "name email avatar")
+            .select("phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt")
+            .lean();
 
-        if (change.operationType === "insert") {
-          try {
-            const order = await model.findById(orderId)
-              .populate("user", "name email avatar")
-              .select("name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name createdAt avatar")
-              .lean();
-
-            if (order) {
-              const enhancedOrder = {
-                ...order,
-                filesList: order.files?.length > 0 ? order.files.map(f => f.name).join(', ') : 'None',
-              };
-              io.to("adminRoom").emit("orderChange", {
-                operationType: "insert",
-                fullDocument: enhancedOrder,
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching order for insert:`, error);
+          if (order) {
+            const enhancedOrder = {
+              ...order,
+              filesList: order.files?.length > 0 ? order.files.map(f => f.name).join(', ') : 'None',
+              user: order.user || {},
+            };
+            io.to("adminRoom").emit("orderChange", {
+              operationType: "insert",
+              fullDocument: enhancedOrder,
+            });
+            await saveNotification("order", {
+              operationType: "insert",
+              fullDocument: enhancedOrder,
+            });
           }
-
-        } else if (change.operationType === "delete") {
-          io.to("adminRoom").emit("orderChange", {
-            operationType: "delete",
-            documentKey: { _id: orderId },
-          });
+        }
+        catch (error) {
+          console.error(`Error fetching order for insert:`, error);
         }
       }
 
@@ -150,58 +167,62 @@ export const setupChangeStream = (io) => {
               .lean();
 
             if (meeting) {
-              io.to("adminRoom").emit("meetingChange", meeting);
-              console.log(`Emitted meetingChange (${change.operationType}):`, meeting);
+              io.to("adminRoom").emit("meetingChange", {
+                operationType: change.operationType,
+                ...meeting,
+              });
+              await saveNotification("meeting", {
+                operationType: change.operationType,
+                ...meeting,
+              });
             }
           } catch (err) {
             console.error("Error fetching meeting:", err);
           }
-
         } else if (change.operationType === "delete") {
           io.to("adminRoom").emit("meetingChange", {
             operationType: "delete",
             documentKey: { _id: meetingId },
           });
-          console.log("Emitted meetingChange (delete):", meetingId);
+          await saveNotification("meeting", {
+            operationType: "delete",
+            documentKey: { _id: meetingId },
+          });
         }
       }
 
       // ----------------- CANCEL REQUEST CHANGES -----------------
-      if (event === "cancelRequestChange") {
-        const requestId = change.documentKey._id;
+      if (event === "cancelRequestChange" && change.operationType === "insert") {
+        try {
+          const requestId = change.documentKey._id;
+          const cancelRequest = await model.findById(requestId)
+            .populate({
+              path: 'order',
+              populate: { path: 'user', select: 'name email avatar' },
+              select: 'phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt',
+            })
+            .lean();
 
-        if (change.operationType === "insert") {
-          try {
-            const cancelRequest = await model.findById(requestId)
-              .populate({
-                path: 'order',
-                populate: { path: 'user', select: 'name email avatar' },
-                select: 'name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar',
-              })
-              .lean();
-
-            if (cancelRequest) {
-              const enhancedRequest = {
-                ...cancelRequest,
-                order: {
-                  ...cancelRequest.order,
-                  filesList: cancelRequest.order.files?.length > 0 ? cancelRequest.order.files.map(f => f.name).join(', ') : 'None',
-                },
-              };
-              io.to("adminRoom").emit("cancelRequestChange", {
-                operationType: "insert",
-                fullDocument: enhancedRequest,
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching cancel request for insert:`, error);
+          if (cancelRequest) {
+            const enhancedRequest = {
+              ...cancelRequest,
+              order: {
+                ...cancelRequest.order,
+                filesList: cancelRequest.order.files?.length > 0 ? cancelRequest.order.files.map(f => f.name).join(', ') : 'None',
+                user: cancelRequest.order.user || {},
+              },
+            };
+            io.to("adminRoom").emit("cancelRequestChange", {
+              operationType: "insert",
+              fullDocument: enhancedRequest,
+            });
+            await saveNotification("cancelRequest", {
+              operationType: "insert",
+              fullDocument: enhancedRequest,
+            });
           }
-
-        } else if (change.operationType === "delete") {
-          io.to("adminRoom").emit("cancelRequestChange", {
-            operationType: "delete",
-            documentKey: { _id: requestId },
-          });
+        } catch (error) {
+          console.error(`Error fetching cancel request for insert:`, error);
         }
       }
     });
@@ -213,7 +234,6 @@ export const setupChangeStream = (io) => {
     return changeStream;
   });
 
-  // ----------------- SOCKET.IO SETUP -----------------
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
@@ -237,7 +257,6 @@ export const setupChangeStream = (io) => {
     });
   });
 
-  // ----------------- CLEANUP ON SHUTDOWN -----------------
   const closeChangeStreams = () => {
     changeStreams.forEach((changeStream, index) => {
       changeStream.close();

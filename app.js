@@ -11,6 +11,7 @@ import http from "http";
 import { setupChangeStream } from "./socket/changeStream.js"; 
 import adminRouter from "./router/admin-router.js";
 import scheduledMeetingRouter from './router/scheduledMeeting-router.js';
+import notificationRoutes from './router/notificationRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -47,6 +48,7 @@ app.use("/api/order", orderRouter);
 app.use("/api/services", serviceRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/scheduled-meetings", scheduledMeetingRouter);
+app.use('/api/notifications', notificationRoutes);
 
 // Connect to MongoDB and set up change stream
 connectDB().then(() => {

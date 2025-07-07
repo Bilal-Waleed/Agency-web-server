@@ -82,17 +82,6 @@ const getCancelRequests = async (req, res) => {
   }
 };
 
-// const getCloudinaryResourceType = (file) => {
-//   if (!file?.url) return 'image';
-
-//   const url = file.url;
-//   if (url.includes('/image/upload/')) return 'image';
-//   if (url.includes('/video/upload/')) return 'video';
-//   if (url.includes('/raw/upload/')) return 'raw';
-
-//   return 'image';
-// };
-
 const acceptCancelRequest = async (req, res) => {
   try {
     const requestId = req.params.id;
@@ -116,33 +105,32 @@ const acceptCancelRequest = async (req, res) => {
 
     if (order.files?.length > 0) {
       console.log("Total Files to delete:", order.files.length);
-
       const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
-
       console.log("Folder to delete:", folderPrefix);
 
       const resourceTypes = ['image', 'raw', 'video'];
-        for (const type of resourceTypes) {
-            try {
-            const deleted = await cloudinary.api.delete_resources_by_prefix(folderPrefix, {
-                resource_type: type,
-            });
-            console.log(`Deleted ${type} resources:`, deleted);
-            } catch (err) {
-            console.warn(`Could not delete ${type} resources:`, err.message);
-            }
-        }
-
+      for (const type of resourceTypes) {
         try {
-            const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
-            console.log("Deleted folder:", deletedFolder);
+          const deleted = await cloudinary.api.delete_resources_by_prefix(folderPrefix, {
+            resource_type: type,
+          });
+          console.log(`Deleted ${type} resources:`, deleted);
         } catch (err) {
-            console.warn("Failed to delete folder:", err.message);
+          console.warn(`Could not delete ${type} resources:`, err.message);
         }
+      }
+
+      try {
+        const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
+        console.log("Deleted folder:", deletedFolder);
+      } catch (err) {
+        console.warn("Failed to delete folder:", err.message);
+      }
     }
 
-    await Order.findByIdAndDelete(order._id);
-    await CancelRequest.findByIdAndDelete(requestId);
+    // Delete without triggering change stream notifications
+    await Order.findByIdAndDelete(order._id, { suppressChangeStream: true });
+    await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
     await sendCancelRequestAcceptedEmail(user.email, user.name, order._id);
 
@@ -168,7 +156,8 @@ const declineCancelRequest = async (req, res) => {
     const userEmail = cancelRequest.user.email;
     const userName = cancelRequest.user.name;
 
-    await CancelRequest.findByIdAndDelete(requestId);
+    // Delete without triggering change stream notifications
+    await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
     await sendCancelRequestDeclinedEmail(userEmail, userName, cancelRequest.order._id);
 
@@ -203,34 +192,34 @@ const cancelOrderByAdmin = async (req, res) => {
     }
 
     const userName = user?.name || order.name;
-    const userEmail = user?.email || order.email ;
+    const userEmail = user?.email || order.email;
 
     if (order.files?.length > 0) {
       const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
-
       const resourceTypes = ['image', 'raw', 'video'];
-        for (const type of resourceTypes) {
-            try {
-            const deleted = await cloudinary.api.delete_resources_by_prefix(folderPrefix, {
-                resource_type: type,
-            });
-            console.log(`Deleted ${type} resources:`, deleted);
-            } catch (err) {
-            console.warn(`Could not delete ${type} resources:`, err.message);
-            }
-        }
-
+      for (const type of resourceTypes) {
         try {
-            const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
-            console.log("Deleted folder:", deletedFolder);
+          const deleted = await cloudinary.api.delete_resources_by_prefix(folderPrefix, {
+            resource_type: type,
+          });
+          console.log(`Deleted ${type} resources:`, deleted);
         } catch (err) {
-            console.warn("Failed to delete folder:", err.message);
+          console.warn(`Could not delete ${type} resources:`, err.message);
         }
+      }
+
+      try {
+        const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
+        console.log("Deleted folder:", deletedFolder);
+      } catch (err) {
+        console.warn("Failed to delete folder:", err.message);
+      }
     }
 
     await sendAdminCancelOrderEmail(userEmail, userName, orderId, reason);
 
-    await Order.findByIdAndDelete(orderId);
+    // Delete without triggering change stream notifications
+    await Order.findByIdAndDelete(orderId, { suppressChangeStream: true });
 
     res.status(200).json({ error: false, message: "Order cancelled successfully" });
   } catch (error) {
@@ -238,6 +227,5 @@ const cancelOrderByAdmin = async (req, res) => {
     res.status(500).json({ error: true, message: "Failed to cancel order", details: error.message });
   }
 };
-
 
 export { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest, cancelOrderByAdmin };
