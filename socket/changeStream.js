@@ -48,7 +48,6 @@ export const setupChangeStream = (io) => {
           };
           io.to(`user:${userId}`).emit("userChange", payload);
           io.to("adminRoom").emit("userChange", payload);
-          await saveNotification("user", payload);
         } else if (change.operationType === "insert") {
           try {
             const newUser = await model.findById(userId).select("_id name email avatar isAdmin createdAt");
@@ -59,7 +58,6 @@ export const setupChangeStream = (io) => {
                 userId,
               };
               io.to("adminRoom").emit("userChange", payload);
-              await saveNotification("user", payload);
             }
           } catch (err) {
             console.error("Error fetching inserted user:", err);
@@ -76,7 +74,6 @@ export const setupChangeStream = (io) => {
               };
               io.to(`user:${userId}`).emit("userChange", payload);
               io.to("adminRoom").emit("userChange", payload);
-              await saveNotification("user", payload);
             }
           } catch (err) {
             console.error("Error fetching updated user:", err);
@@ -108,20 +105,17 @@ export const setupChangeStream = (io) => {
 
         if (change.operationType === "insert") {
           io.emit("serviceCreated", change.fullDocument);
-          await saveNotification("service", change.fullDocument);
         } else if (change.operationType === "update") {
           try {
             const updatedService = await model.findById(serviceId);
             if (updatedService) {
               io.emit("serviceUpdated", updatedService);
-              await saveNotification("service", updatedService);
             }
           } catch (err) {
             console.error("Error fetching updated service:", err);
           }
         } else if (change.operationType === "delete") {
           io.emit("serviceDeleted", { id: serviceId });
-          await saveNotification("service", { id: serviceId, operationType: "delete" });
         }
       }
 
