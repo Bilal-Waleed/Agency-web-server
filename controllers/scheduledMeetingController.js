@@ -63,7 +63,6 @@ const createScheduledMeeting = async (req, res) => {
       });
     }
 
-    // Fetch user details
     const user = await User.findById(userId).select('name email avatar');
     if (!user) {
       return res.status(404).send({
@@ -76,7 +75,7 @@ const createScheduledMeeting = async (req, res) => {
       user: userId,
       userEmail: user.email,
       userName: user.name,
-      userAvatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`, // Fallback to ui-avatars
+      userAvatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`, 
       service: serviceId,
       date,
       time,
