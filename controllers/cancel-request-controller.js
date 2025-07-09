@@ -30,6 +30,9 @@ const createCancelRequest = async (req, res) => {
     const cancelRequest = new CancelRequest({
       order: orderId,
       user: req.user._id,
+      userName: req.user.name,
+      userEmail: req.user.email,
+      userAvatar: req.user.avatar,
       reason,
     });
 
@@ -49,15 +52,14 @@ const getCancelRequests = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const cancelRequests = await CancelRequest.find()
-      .populate({
-        path: 'order',
-        populate: { path: 'user', select: 'name email avatar' },
-        select: 'name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar',
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    .populate({
+      path: 'order',
+      select: 'name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar',
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
 
     const enhancedRequests = cancelRequests.map((request) => ({
       ...request,
@@ -90,39 +92,31 @@ const acceptCancelRequest = async (req, res) => {
       return res.status(400).json({ error: true, message: "Invalid cancel request ID format" });
     }
 
-    const cancelRequest = await CancelRequest.findById(requestId)
-      .populate({
-        path: 'order',
-        select: 'files _id',
-      })
-      .populate('user');
+    const cancelRequest = await CancelRequest.findById(requestId).populate({
+      path: 'order',
+      select: 'files _id',
+    });
 
     if (!cancelRequest) {
       return res.status(404).json({ error: true, message: "Cancel request not found" });
     }
 
-    const { order, user } = cancelRequest;
+    const { order, userEmail, userName } = cancelRequest;
 
-    if (order.files?.length > 0) {
-      console.log("Total Files to delete:", order.files.length);
+    if (order?.files?.length > 0) {
       const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
-      console.log("Folder to delete:", folderPrefix);
-
       const resourceTypes = ['image', 'raw', 'video'];
+
       for (const type of resourceTypes) {
         try {
-          const deleted = await cloudinary.api.delete_resources_by_prefix(folderPrefix, {
-            resource_type: type,
-          });
-          console.log(`Deleted ${type} resources:`, deleted);
+          await cloudinary.api.delete_resources_by_prefix(folderPrefix, { resource_type: type });
         } catch (err) {
           console.warn(`Could not delete ${type} resources:`, err.message);
         }
       }
 
       try {
-        const deletedFolder = await cloudinary.api.delete_folder(folderPrefix);
-        console.log("Deleted folder:", deletedFolder);
+        await cloudinary.api.delete_folder(folderPrefix);
       } catch (err) {
         console.warn("Failed to delete folder:", err.message);
       }
@@ -131,7 +125,7 @@ const acceptCancelRequest = async (req, res) => {
     await Order.findByIdAndDelete(order._id, { suppressChangeStream: true });
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
-    await sendCancelRequestAcceptedEmail(user.email, user.name, order._id);
+    await sendCancelRequestAcceptedEmail(userEmail, userName, order._id);
 
     res.status(200).json({ error: false, message: "Cancel request accepted and order deleted" });
   } catch (error) {
@@ -147,17 +141,16 @@ const declineCancelRequest = async (req, res) => {
       return res.status(400).json({ error: true, message: "Invalid cancel request ID format" });
     }
 
-    const cancelRequest = await CancelRequest.findById(requestId).populate('user');
+    const cancelRequest = await CancelRequest.findById(requestId);
     if (!cancelRequest) {
       return res.status(404).json({ error: true, message: "Cancel request not found" });
     }
 
-    const userEmail = cancelRequest.user.email;
-    const userName = cancelRequest.user.name;
+    const { userEmail, userName, order } = cancelRequest;
 
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
-    await sendCancelRequestDeclinedEmail(userEmail, userName, cancelRequest.order._id);
+    await sendCancelRequestDeclinedEmail(userEmail, userName, order._id);
 
     res.status(200).json({ error: false, message: "Cancel request declined" });
   } catch (error) {

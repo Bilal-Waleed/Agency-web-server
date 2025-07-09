@@ -12,6 +12,17 @@ const cancelRequestSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    userName: {
+      type: String,
+      required: true,
+    },
+    userEmail: {
+      type: String,
+      required: true,
+    },
+    userAvatar: {
+      type: String,
+    },
     reason: {
       type: String,
       required: true,
