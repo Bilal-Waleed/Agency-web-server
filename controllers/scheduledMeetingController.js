@@ -195,7 +195,10 @@ const acceptMeeting = async (req, res) => {
       data: meeting,
     });
 
-    io.to('adminRoom').emit('meetingChange', meeting);
+    io.to('adminRoom').emit('meetingUI', {
+      action: 'update',
+      data: meeting,
+    });
 
     sendMeetingAcceptedEmail(
       meeting.userEmail || meeting.user?.email,
@@ -216,6 +219,7 @@ const acceptMeeting = async (req, res) => {
     });
   }
 };
+
 
 const rescheduleMeeting = async (req, res) => {
   try {
@@ -272,8 +276,11 @@ const rescheduleMeeting = async (req, res) => {
       message: 'Meeting rescheduled successfully',
       data: populatedMeeting,
     });
-
-    io.to('adminRoom').emit('meetingChange', populatedMeeting);
+    
+    io.to('adminRoom').emit('meetingUI', {
+      action: 'update',
+      data: populatedMeeting,
+    });
 
     sendMeetingRescheduledEmail(
       populatedMeeting.userEmail || populatedMeeting.user?.email,

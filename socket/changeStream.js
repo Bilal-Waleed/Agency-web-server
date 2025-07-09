@@ -153,7 +153,7 @@ export const setupChangeStream = (io) => {
       if (event === "meetingChange") {
         const meetingId = change.documentKey._id;
 
-        if (["insert", "update"].includes(change.operationType)) {
+        if (change.operationType === "insert") {
           try {
             const meeting = await model.findById(meetingId)
               .populate("user", "name email avatar")
@@ -161,57 +161,49 @@ export const setupChangeStream = (io) => {
               .lean();
 
             if (meeting) {
-              io.to("adminRoom").emit("meetingChange", {
-                operationType: change.operationType,
-                ...meeting,
-              });
-              await saveNotification("meeting", {
-                operationType: change.operationType,
-                ...meeting,
-              });
+              // Check if created by user (not admin)
+              const createdByAdmin = meeting.user?.isAdmin;
+
+              if (!createdByAdmin) {
+                // Only emit and notify if not admin
+                io.to("adminRoom").emit("meetingChange", {
+                  operationType: "insert",
+                  ...meeting,
+                });
+
+                io.to("adminRoom").emit("meetingUI", {
+                  action: "insert",
+                  data: meeting,
+                });
+
+                await saveNotification("meeting", {
+                  operationType: "insert",
+                  ...meeting,
+                });
+              }
             }
           } catch (err) {
-            console.error("Error fetching meeting:", err);
+            console.error("Error fetching inserted meeting:", err);
           }
-        } else if (change.operationType === "delete") {
+        }
+
+        if (change.operationType === "update") {
+        const meeting = await model.findById(meetingId)
+          .populate("user", "name email avatar")
+          .populate("service", "title")
+          .lean();
+
+        if (meeting) {
+
+          io.to("adminRoom").emit("meetingUI", {
+            action: "update",
+            data: meeting,
+          });
+
         }
       }
-
-      // ----------------- CANCEL REQUEST CHANGES -----------------
-      if (event === "cancelRequestChange" && change.operationType === "insert") {
-        try {
-          const requestId = change.documentKey._id;
-          const cancelRequest = await model.findById(requestId)
-            .populate({
-              path: 'order',
-              populate: { path: 'user', select: 'name email avatar' },
-              select: 'phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt',
-            })
-            .lean();
-
-          if (cancelRequest) {
-            const enhancedRequest = {
-              ...cancelRequest,
-              order: {
-                ...cancelRequest.order,
-                filesList: cancelRequest.order.files?.length > 0 ? cancelRequest.order.files.map(f => f.name).join(', ') : 'None',
-                user: cancelRequest.order.user || {},
-              },
-            };
-            io.to("adminRoom").emit("cancelRequestChange", {
-              operationType: "insert",
-              fullDocument: enhancedRequest,
-            });
-            await saveNotification("cancelRequest", {
-              operationType: "insert",
-              fullDocument: enhancedRequest,
-            });
-          }
-        } catch (error) {
-          console.error(`Error fetching cancel request for insert:`, error);
-        }
-      }
-    });
+    }
+  });
 
     changeStream.on("error", (error) => {
       console.error(`Change stream error for ${model.modelName}:`, error);
