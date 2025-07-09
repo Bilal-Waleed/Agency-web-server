@@ -233,7 +233,7 @@ const getOrders = async (req, res) => {
 
     const orders = await Order.find()
       .populate("user", "name email avatar")
-      .select("name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar")
+      .select("name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url createdAt avatar status")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

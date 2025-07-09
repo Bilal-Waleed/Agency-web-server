@@ -128,7 +128,6 @@ const acceptCancelRequest = async (req, res) => {
       }
     }
 
-    // Delete without triggering change stream notifications
     await Order.findByIdAndDelete(order._id, { suppressChangeStream: true });
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
@@ -156,7 +155,6 @@ const declineCancelRequest = async (req, res) => {
     const userEmail = cancelRequest.user.email;
     const userName = cancelRequest.user.name;
 
-    // Delete without triggering change stream notifications
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
     await sendCancelRequestDeclinedEmail(userEmail, userName, cancelRequest.order._id);
@@ -218,7 +216,6 @@ const cancelOrderByAdmin = async (req, res) => {
 
     await sendAdminCancelOrderEmail(userEmail, userName, orderId, reason);
 
-    // Delete without triggering change stream notifications
     await Order.findByIdAndDelete(orderId, { suppressChangeStream: true });
 
     res.status(200).json({ error: false, message: "Order cancelled successfully" });

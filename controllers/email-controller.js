@@ -26,7 +26,6 @@ const sendContactEmail = async (email, name) => {
         <p>Our team is currently reviewing your inquiry, and we will get back to you as soon as possible with a detailed response. We are committed to delivering high-quality solutions tailored to your needs.</p>
         <p>In the meantime, feel free to explore our portfolio or contact us for any urgent queries.</p>
         <p>Best regards,</p>
-       rest regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
         Email: boldzyt.ds@gmail.com<br>
         Website: www.boldzytdigital.com</p>
@@ -251,6 +250,33 @@ const sendAdminCancelOrderEmail = async (email, name, orderId, reason) => {
   await transporter.sendMail(mailOptions);
 };
 
+const sendOrderCompletedEmail = async (email, name, orderId, message, files) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: "Order Completed - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>We are pleased to inform you that your order (Order ID: ${orderId}) has been successfully completed!</p>
+        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
+        <p>Please find the delivered files attached to this email. You can download and save them for your records.</p>
+        <p>Thank you for choosing Bold-Zyt Digital Solutions. We hope you are satisfied with our services. If you have any feedback or need further assistance, please feel free to contact us.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+    attachments: files.map((file) => ({
+      filename: file.originalname,
+      content: file.buffer,
+    })),
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 export {
   sendContactEmail,
   sendOrderConfirmationEmail,
@@ -262,4 +288,5 @@ export {
   sendCancelRequestAcceptedEmail,
   sendCancelRequestDeclinedEmail,
   sendAdminCancelOrderEmail,
+  sendOrderCompletedEmail,
 };

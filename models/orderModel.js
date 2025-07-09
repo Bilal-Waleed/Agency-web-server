@@ -71,7 +71,6 @@ const orderSchema = new mongoose.Schema({
             }
         }
     ],
-
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -81,6 +80,11 @@ const orderSchema = new mongoose.Schema({
         type: String,
         required: false,
         default: null
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'completed'],
+        default: 'pending'
     }
 }, {
     timestamps: true

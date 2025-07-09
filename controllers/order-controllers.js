@@ -125,7 +125,7 @@ const getUserOrders = async (req, res) => {
         { email: userEmail }
       ]
     })
-      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar')
+      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar status')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -144,7 +144,5 @@ const getUserOrders = async (req, res) => {
     res.status(500).json({ error: true, message: 'Failed to fetch user orders' });
   }
 };
-
-
 
 export { orderForm, getUserOrders };

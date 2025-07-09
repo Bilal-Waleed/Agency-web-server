@@ -1,9 +1,14 @@
 import multer from 'multer';
 
-const storage = multer.memoryStorage(); 
+const storage = multer.memoryStorage();
+
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, 
+});
+
+const imageUpload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png/;
     const mimetype = filetypes.test(file.mimetype);
@@ -15,4 +20,4 @@ const upload = multer({
   },
 });
 
-export default upload;
+export { upload, imageUpload };
