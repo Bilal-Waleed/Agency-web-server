@@ -58,13 +58,13 @@ const refreshToken = async (req, res) => {
 
 const getDashboardData = async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 15;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const start = req.query.start ? new Date(req.query.start) : new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+    const end = req.query.end ? new Date(req.query.end) : new Date();
+    end.setHours(23, 59, 59, 999);
 
     const matchStage = {
       $match: {
-        createdAt: { $gte: startDate }
+        createdAt: { $gte: start, $lte: end }
       }
     };
 
@@ -72,7 +72,7 @@ const getDashboardData = async (req, res) => {
       matchStage,
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "+05:00" } },
           count: { $sum: 1 },
         },
       },
@@ -83,7 +83,7 @@ const getDashboardData = async (req, res) => {
       matchStage,
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "+05:00" } },
           count: { $sum: 1 },
         },
       },
@@ -94,7 +94,7 @@ const getDashboardData = async (req, res) => {
       matchStage,
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id:{ $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "+05:00" } },
           count: { $sum: 1 },
         },
       },
