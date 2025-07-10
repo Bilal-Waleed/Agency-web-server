@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema({
+    orderId: {
+        type: String,
+        required: true,
+        unique: true, 
+        trim: true,
+    },
     name: {
         type: String,
         required: true,
@@ -89,6 +95,7 @@ const orderSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+orderSchema.index({ orderId: 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 export default Order;

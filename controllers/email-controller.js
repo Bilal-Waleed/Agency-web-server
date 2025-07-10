@@ -45,6 +45,7 @@ const sendOrderConfirmationEmail = async (email, name, orderDetails) => {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
         <p>Thank you for placing an order with our Bold-Zyt Digital Solutions agency. We are excited to work on your project!</p>
+        <p><strong>Order ID:</strong> ${orderDetails.orderId}</p>
         <p><strong>Order Details:</strong></p>
         <ul>
           <li>Order Type: ${orderDetails.projectType || 'N/A'}</li>

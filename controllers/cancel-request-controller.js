@@ -52,14 +52,14 @@ const getCancelRequests = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const cancelRequests = await CancelRequest.find()
-    .populate({
-      path: 'order',
-      select: 'name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar',
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+      .populate({
+        path: 'order',
+        select: 'orderId name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar',
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     const enhancedRequests = cancelRequests.map((request) => ({
       ...request,
@@ -94,7 +94,7 @@ const acceptCancelRequest = async (req, res) => {
 
     const cancelRequest = await CancelRequest.findById(requestId).populate({
       path: 'order',
-      select: 'files _id',
+      select: 'orderId files _id',
     });
 
     if (!cancelRequest) {
@@ -125,7 +125,7 @@ const acceptCancelRequest = async (req, res) => {
     await Order.findByIdAndDelete(order._id, { suppressChangeStream: true });
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
-    await sendCancelRequestAcceptedEmail(userEmail, userName, order._id);
+    await sendCancelRequestAcceptedEmail(userEmail, userName, order.orderId);
 
     res.status(200).json({ error: false, message: "Cancel request accepted and order deleted" });
   } catch (error) {
@@ -141,7 +141,10 @@ const declineCancelRequest = async (req, res) => {
       return res.status(400).json({ error: true, message: "Invalid cancel request ID format" });
     }
 
-    const cancelRequest = await CancelRequest.findById(requestId);
+    const cancelRequest = await CancelRequest.findById(requestId).populate({
+      path: 'order',
+      select: 'orderId',
+    });
     if (!cancelRequest) {
       return res.status(404).json({ error: true, message: "Cancel request not found" });
     }
@@ -150,7 +153,7 @@ const declineCancelRequest = async (req, res) => {
 
     await CancelRequest.findByIdAndDelete(requestId, { suppressChangeStream: true });
 
-    await sendCancelRequestDeclinedEmail(userEmail, userName, order._id);
+    await sendCancelRequestDeclinedEmail(userEmail, userName, order.orderId);
 
     res.status(200).json({ error: false, message: "Cancel request declined" });
   } catch (error) {
@@ -207,7 +210,7 @@ const cancelOrderByAdmin = async (req, res) => {
       }
     }
 
-    await sendAdminCancelOrderEmail(userEmail, userName, orderId, reason);
+    await sendAdminCancelOrderEmail(userEmail, userName, order.orderId, reason);
 
     await Order.findByIdAndDelete(orderId, { suppressChangeStream: true });
 

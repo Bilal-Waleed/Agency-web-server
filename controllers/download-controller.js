@@ -256,7 +256,7 @@ const completeOrder = async (req, res) => {
 
     await Order.findByIdAndUpdate(orderId, { status: 'completed' });
 
-    await sendOrderCompletedEmail(userEmail, userName, orderId, message, files);
+    await sendOrderCompletedEmail(userEmail, userName, order.orderId, message, files);
 
     res.status(200).json({ error: false, message: "Order completed successfully" });
   } catch (error) {

@@ -5,7 +5,27 @@ import { sendOrderConfirmationEmail } from "./email-controller.js";
 import User from "../models/userModel.js";
 import cloudinary from "../config/cloudinary.js";
 import { Readable } from "stream";
-import { console } from "inspector";
+
+const generateOrderId = async () => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const numLetters = Math.random() < 0.5 ? 2 : 3; 
+  let orderId;
+  let isUnique = false;
+
+  while (!isUnique) {
+    const randomLetters = Array.from({ length: numLetters }, () => 
+      letters[Math.floor(Math.random() * letters.length)]).join('');
+    const randomDigits = Math.floor(1000 + Math.random() * 9000).toString();
+    orderId = `${randomLetters}${randomDigits}`;
+
+    const existingOrder = await Order.findOne({ orderId });
+    if (!existingOrder) {
+      isUnique = true;
+    }
+  }
+
+  return orderId;
+};
 
 const uploadToCloudinary = (fileBuffer, folderName, mimetype) => {
   const isRaw = !mimetype.startsWith("image/"); 
@@ -25,7 +45,6 @@ const uploadToCloudinary = (fileBuffer, folderName, mimetype) => {
     Readable.from(fileBuffer).pipe(uploadStream);
   });
 };
-
 
 const orderForm = async (req, res) => {
   try {
@@ -49,8 +68,10 @@ const orderForm = async (req, res) => {
 
     const files = req.files || [];
     const fileNames = files.map(file => file.originalname); 
+    const orderId = await generateOrderId();
 
     const order = new Order({
+      orderId, 
       ...formData,
       files: fileNames.map(name => ({ name })),  
       user: decoded.userID,
@@ -61,6 +82,7 @@ const orderForm = async (req, res) => {
 
     res.status(200).send({
       message: 'Order submitted successfully',
+      orderId, 
       data: {
         ...formData,
         fileNames: fileNames,
@@ -94,6 +116,7 @@ const orderForm = async (req, res) => {
         sendOrderConfirmationEmail(user.email, user.name, {
           ...formData,
           files: fileNames.join(", "), 
+          orderId, // Pass orderId to email
         }).catch(err => console.error("Email sending failed:", err.message));
 
       } catch (bgError) {
@@ -110,7 +133,6 @@ const orderForm = async (req, res) => {
   }
 };
 
-
 const getUserOrders = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -125,7 +147,7 @@ const getUserOrders = async (req, res) => {
         { email: userEmail }
       ]
     })
-      .select('name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar status')
+      .select('orderId name email phone projectType projectBudget timeline projectDescription paymentReference paymentMethod files.name files.url files.public_id createdAt avatar status')
       .sort({ createdAt: -1 })
       .lean();
 
