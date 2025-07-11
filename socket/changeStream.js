@@ -165,7 +165,7 @@ export const setupChangeStream = (io) => {
               if (!createdByAdmin) {
                 io.to("adminRoom").emit("meetingChange", {
                   operationType: "insert",
-                  ...meeting,
+                  fullDocument: meeting,
                 });
 
                 io.to("adminRoom").emit("meetingUI", {
