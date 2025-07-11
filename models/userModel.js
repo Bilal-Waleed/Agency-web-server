@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: false, 
+    required: false,
   },
   isAdmin: {
     type: Boolean,
@@ -21,10 +21,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  otp: {
+    type: String,
+    default: "",
+  },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true
-}
-);
+});
 
 const User = mongoose.model("User", userSchema);
 export default User;

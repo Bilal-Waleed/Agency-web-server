@@ -4,11 +4,15 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import dotenv from "dotenv";
-import { sendRegistrationEmail, sendPasswordResetEmail } from "./email-controller.js";
+import { sendRegistrationEmail, sendPasswordResetEmail, sendOTPVerificationEmail } from "./email-controller.js";
 
 dotenv.config();
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const generateOTP = () => {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+};
 
 const home = async (req, res) => {
   try {
@@ -34,6 +38,7 @@ const Register = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    const otp = generateOTP();
 
     const newUser = new User({
       name,
@@ -41,28 +46,25 @@ const Register = async (req, res) => {
       password: hashedPassword,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
       isAdmin: false,
+      otp,
+      isVerified: false,
     });
 
     await newUser.save();
 
     res.status(200).json({
-      message: "User registered successfully. Please check your email and log in.",
+      message: "User registered successfully. Please verify your OTP.",
       user: {
         _id: newUser._id,
         name: newUser.name,
         email: newUser.email,
-        emailavatar: newUser.avatar,
+        avatar: newUser.avatar,
         isAdmin: newUser.isAdmin,
       },
       userID: newUser._id.toString(),
     });
 
-    sendRegistrationEmail(email, name)
-      .then(() => console.log("Registration email sent successfully."))
-      .catch((emailError) => {
-        console.error("Error sending registration email:", emailError.message);
-
-      });
+    await sendOTPVerificationEmail(email, name, otp);
 
   } catch (error) {
     console.error(error);
@@ -70,6 +72,79 @@ const Register = async (req, res) => {
   }
 };
 
+const GoogleRegister = async (req, res) => {
+  try {
+    const { credential } = req.body;
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).send({ error: "Account already exists, please login" });
+    }
+
+    const otp = generateOTP();
+
+    const newUser = new User({
+      name,
+      email,
+      password: "",
+      avatar: picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
+      isAdmin: false,
+      otp,
+      isVerified: false,
+    });
+
+    await newUser.save();
+
+    res.status(201).send({
+      message: "User registered successfully via Google. Please verify your OTP.",
+      user: {
+        _id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        avatar: newUser.avatar,
+        isAdmin: newUser.isAdmin,
+      },
+      userID: newUser._id.toString(),
+    });
+
+    await sendOTPVerificationEmail(email, name, otp);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: "Google registration failed" });
+  }
+};
+
+const VerifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    if (user.otp !== otp) {
+      return res.status(400).send({ error: "Invalid OTP" });
+    }
+
+    user.otp = "";
+    user.isVerified = true;
+    await user.save();
+
+    res.status(200).send({ message: "OTP verified successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: "OTP verification failed" });
+  }
+};
 
 const Login = async (req, res) => {
   try {
@@ -85,13 +160,19 @@ const Login = async (req, res) => {
       return res.status(404).send({ error: "Invalid email or password" });
     }
 
+    if (!user.isVerified) {
+      return res.status(403).send({ error: "Please verify your OTP before logging in" });
+    }
+
     if (!user.password) {
       return res.status(400).send({ error: "No password set. Use Google login or reset your password." });
     }
+
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(401).send({ error: "Invalid email or password" });
     }
+
     const token = jwt.sign(
       {
         userID: user._id.toString(),
@@ -123,55 +204,6 @@ const Login = async (req, res) => {
   }
 };
 
-const GoogleRegister = async (req, res) => {
-  try {
-    const { credential } = req.body;
-    const ticket = await client.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
-
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).send({ error: "Account already exists, please login" });
-    }
-
-    const newUser = new User({
-      name,
-      email,
-      password: "",
-      avatar: picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
-      isAdmin: false,
-    });
-
-    await newUser.save();
-
-    res.status(201).send({
-      message: "User registered successfully via Google. Please log in.",
-      user: {
-        _id: newUser._id,
-        name: newUser.name,
-        email: newUser.email,
-        avatar: newUser.avatar,
-        isAdmin: newUser.isAdmin,
-      },
-      userID: newUser._id.toString(),
-    });
-
-    sendRegistrationEmail(email, name)
-      .then(() => console.log("Registration email sent successfully."))
-      .catch((err) => console.error("Error sending registration email:", err.message));
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ error: "Google registration failed" });
-  }
-};
-
-
 const GoogleLogin = async (req, res) => {
   try {
     const { credential } = req.body;
@@ -187,7 +219,11 @@ const GoogleLogin = async (req, res) => {
       return res.status(404).send({ error: "No user account found, please register first" });
     }
 
-   const token = jwt.sign(
+    if (!user.isVerified) {
+      return res.status(403).send({ error: "Please verify your OTP before logging in" });
+    }
+
+    const token = jwt.sign(
       {
         userID: user._id.toString(),
         name: user.name,
@@ -279,7 +315,8 @@ const UserCheck = async (req, res) => {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
-        isAdmin: user.isAdmin
+        isAdmin: user.isAdmin,
+        isVerified: user.isVerified,
       }
     });
   } catch (error) {
@@ -290,4 +327,4 @@ const UserCheck = async (req, res) => {
   }
 };
 
-export { home, Register, Login, GoogleRegister, GoogleLogin, ForgotPassword, ResetPassword, UserCheck };
+export { home, Register, Login, GoogleRegister, GoogleLogin, ForgotPassword, ResetPassword, UserCheck, VerifyOTP };

@@ -75,8 +75,32 @@ const sendRegistrationEmail = async (email, name) => {
         <h2 style="color: #2c3e50;">Welcome, ${name}!</h2>
         <p>Thank you for registering with Your Digital Solutions Agency. We're thrilled to have you on board!</p>
         <p>Your account has been successfully created, and you can now access our services, place orders, and explore our portfolio of web development solutions.</p>
+        <p>Please verify your email using the OTP sent in a separate email.</p>
         <p>If you have any questions or need assistance, our support team is here to help. Feel free to reach out at any time.</p>
         <p>We look forward to collaborating with you on your next project!</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+const sendOTPVerificationEmail = async (email, name, otp) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: "OTP Verification - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>Thank you for registering with Bold-Zyt Digital Solutions. To complete your registration, please use the following OTP to verify your email address:</p>
+        <h3 style="color: #007bff; font-size: 24px; text-align: center;">${otp}</h3>
+        <p>This OTP is valid for 10 minutes. Please enter it on the verification page to activate your account.</p>
+        <p>If you did not request this, please ignore this email.</p>
         <p>Best regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
         Email: boldzyt.ds@gmail.com<br>
@@ -282,6 +306,7 @@ export {
   sendContactEmail,
   sendOrderConfirmationEmail,
   sendRegistrationEmail,
+  sendOTPVerificationEmail,
   sendPasswordResetEmail,
   sendScheduledMeetingEmail,
   sendMeetingAcceptedEmail,
