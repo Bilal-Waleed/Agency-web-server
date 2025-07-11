@@ -221,4 +221,26 @@ const cancelOrderByAdmin = async (req, res) => {
   }
 };
 
-export { createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest, cancelOrderByAdmin };
+const getUserCancelRequests = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const cancelRequests = await CancelRequest.find({ user: userId })
+      .populate({
+        path: 'order',
+        select: 'orderId _id',
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      error: false,
+      message: "User cancel requests fetched successfully",
+      data: cancelRequests,
+    });
+  } catch (error) {
+    console.error("Error fetching user cancel requests:", error);
+    res.status(500).json({ error: true, message: "Failed to fetch user cancel requests" });
+  }
+};
+
+export { getUserCancelRequests, createCancelRequest, getCancelRequests, acceptCancelRequest, declineCancelRequest, cancelOrderByAdmin };
