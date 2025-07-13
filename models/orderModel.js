@@ -95,7 +95,6 @@ const orderSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
-orderSchema.index({ orderId: 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 export default Order;
