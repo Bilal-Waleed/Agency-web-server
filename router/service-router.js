@@ -8,7 +8,7 @@ import {  imageUpload } from '../config/multer.js';
 
 const router = express.Router();
 
-router.get('/', getServices);
+router.get('/',  getServices);
 router.post('/', imageUpload.single('image'), createService);
 router.get('/:id', getServiceById);
 

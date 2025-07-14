@@ -17,12 +17,6 @@ const authMiddleware = async (req, res, next) => {
 
     req.user = user;
 
-    if (req.path.includes('/accept') || req.path.includes('/reschedule')) {
-      if (!user.isAdmin) {
-        return res.status(403).send({ success: false, message: 'Admin access required' });
-      }
-    }
-
     next();
   } catch (error) {
     res.status(401).send({ success: false, message: 'Invalid token', details: error.message });
