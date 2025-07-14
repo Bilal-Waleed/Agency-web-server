@@ -3,7 +3,6 @@ import Order from "../models/orderModel.js";
 import Contact from "../models/contactModel.js";
 import Service from "../models/serviceModel.js";
 import serviceSchema from "../validators/service-schema.js";
-import jwt from "jsonwebtoken";
 import cloudinary from "../config/cloudinary.js";
 import { Readable } from "stream";
 
@@ -18,42 +17,6 @@ const uploadToCloudinary = (fileBuffer, folderName = 'services') => {
     );
     Readable.from(fileBuffer).pipe(uploadStream);
   });
-};
-
-const refreshToken = async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      console.error('No token provided for refresh');
-      return res.status(401).json({ error: true, message: "No token provided" });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('Decoded token for refresh:', decoded);
-
-    const user = await User.findById(decoded.userID).select("_id name email avatar isAdmin");
-    if (!user) {
-      console.error('User not found for refresh:', decoded.userID);
-      return res.status(404).json({ error: true, message: "User not found" });
-    }
-
-    const newToken = jwt.sign(
-      { userID: user._id, name: user.name, email: user.email, avatar: user.avatar, isAdmin: user.isAdmin },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.status(200).json({ error: false, token: newToken });
-  } catch (error) {
-    console.error('Error refreshing token:', error.message, error.name);
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: true, message: "Invalid or malformed token" });
-    }
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ error: true, message: "Token expired" });
-    }
-    res.status(500).json({ error: true, message: "Internal server error" });
-  }
 };
 
 const getDashboardData = async (req, res) => {
@@ -372,7 +335,6 @@ const deleteService = async (req, res) => {
 };
 
 export {
-  refreshToken,
   getDashboardData,
   getUsers,
   deleteUsers,

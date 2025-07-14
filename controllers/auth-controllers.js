@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import dotenv from "dotenv";
-import { sendRegistrationEmail, sendPasswordResetEmail, sendOTPVerificationEmail } from "./email-controller.js";
+import { sendPasswordResetEmail, sendOTPVerificationEmail } from "./email-controller.js";
 
 dotenv.config();
 

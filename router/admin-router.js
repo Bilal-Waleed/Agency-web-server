@@ -1,6 +1,5 @@
 import express from "express";
 import {
-  refreshToken,
   getDashboardData,
   getUsers,
   deleteUsers,
@@ -35,7 +34,6 @@ router.get("/services", isAdminMiddleware, getServices);
 router.post("/services", isAdminMiddleware, imageUpload.single("image"), createService);
 router.put("/services/:id", isAdminMiddleware, imageUpload.single("image"), updateService);
 router.delete("/services/:id", isAdminMiddleware, deleteService);
-router.post("/refresh-token", refreshToken);
 router.post("/cancel-requests", authMiddleware, createCancelRequest);
 
 export default router;
