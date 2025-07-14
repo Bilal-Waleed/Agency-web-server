@@ -300,14 +300,22 @@ const UserCheck = async (req, res) => {
       message: "Token not provided, please login first!",
     });
   }
+
   const token = req.headers.authorization.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Token missing" });
+  if (!token) {
+    return res.status(401).json({ error: true, message: "Token missing" });
+  }
 
   try {
     let decodedUser = jwt.verify(token, process.env.JWT_SECRET);
+
     const user = await User.findById(decodedUser.userID);
-    if (!user) return res.status(401).json({ error: "User not found" });
-    res.status(200).json({
+
+    if (!user) {
+      return res.status(401).json({ error: true, message: "User not found" });
+    }
+
+    return res.status(200).json({
       error: false,
       message: "User data fetched successfully!",
       user: {
@@ -317,14 +325,32 @@ const UserCheck = async (req, res) => {
         avatar: user.avatar,
         isAdmin: user.isAdmin,
         isVerified: user.isVerified,
-      }
+      },
     });
   } catch (error) {
-    res.status(401).json({
+    console.error('Token Verification Error:', error.message);
+
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        error: true,
+        message: "Invalid token!",
+      });
+    }
+
+    if (error.name === 'MongoNetworkError' || error.message.includes('getaddrinfo ENOTFOUND')) {
+      return res.status(503).json({
+        error: true,
+        message: "Database connection failed. Please check your internet connection.",
+      });
+    }
+
+    return res.status(500).json({
       error: true,
-      message: "Invalid token!",
+      message: "Something went wrong on the server.",
     });
   }
-};
+}
+
+
 
 export { home, Register, Login, GoogleRegister, GoogleLogin, ForgotPassword, ResetPassword, UserCheck, VerifyOTP };
