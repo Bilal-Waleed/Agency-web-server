@@ -18,24 +18,20 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer(app);
-const io = new Server(server, {
+export const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST"],
   },
 });
 
-// Socket.IO connection handling
 io.on("connection", (socket) => {
   console.log("A client connected:", socket.id);
-
-  // Handle disconnection
   socket.on("disconnect", () => {
     console.log("A client disconnected:", socket.id);
   });
 });
 
-// Make io accessible in routes/controllers
 app.set("io", io);
 
 app.use(cors());
@@ -50,12 +46,15 @@ app.use("/api/admin", adminRouter);
 app.use("/api/scheduled-meetings", scheduledMeetingRouter);
 app.use("/api/notifications", notificationRoutes);
 
-// Connect to MongoDB and set up change stream
-connectDB().then(() => {
-  setupChangeStream(io); // Use adminChangeStream.js
-});
 
-// Use server.listen instead of app.listen
+(async () => {
+  await connectDB();
+  setupChangeStream(io);
+
+  const { startCronJob } = await import('./config/cron-job.js');
+  startCronJob(io);
+})();
+
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });

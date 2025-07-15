@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import { google } from "googleapis";
 
 dotenv.config();
 
@@ -13,6 +14,58 @@ const transporter = nodemailer.createTransport({
   logger: false,
   debug: false,
 });
+
+// Google Calendar API setup
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  "https://developers.google.com/oauthplayground"
+);
+
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
+
+const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+
+const generateGoogleMeetLink = async (meetingDetails) => {
+  try {
+    const event = {
+      summary: `Meeting with ${meetingDetails.userName} - Bold-Zyt Digital Solutions`,
+      description: `Service: ${meetingDetails.serviceTitle}\nScheduled meeting with ${meetingDetails.userName}`,
+      start: {
+        dateTime: new Date(`${meetingDetails.date}T${meetingDetails.time}`).toISOString(),
+        timeZone: 'UTC',
+      },
+      end: {
+        dateTime: new Date(new Date(`${meetingDetails.date}T${meetingDetails.time}`).getTime() + 60 * 60 * 1000).toISOString(),
+        timeZone: 'UTC',
+      },
+      conferenceData: {
+        createRequest: {
+          requestId: `meet-${meetingDetails._id}`,
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      },
+      attendees: [
+        { email: meetingDetails.userEmail },
+        { email: process.env.EMAIL_USER },
+      ],
+    };
+
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      conferenceDataVersion: 1,
+    });
+
+    return response.data.hangoutLink;
+  } catch (error) {
+    console.error('Error generating Google Meet link:', error.message);
+    throw error;
+  }
+};
 
 const sendContactEmail = async (email, name) => {
   const mailOptions = {
@@ -302,6 +355,31 @@ const sendOrderCompletedEmail = async (email, name, orderId, message, files) => 
   await transporter.sendMail(mailOptions);
 };
 
+const sendMeetingReminderEmail = async (userEmail, userName, serviceTitle, date, time, meetLink) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: userEmail,
+    subject: "Meeting Reminder - Bold-Zyt Digital Solutions",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${userName},</h2>
+        <p>This is a reminder for your upcoming meeting with Bold-Zyt Digital Solutions:</p>
+        <p><strong>Service:</strong> ${serviceTitle}</p>
+        <p><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
+        <p><strong>Time:</strong> ${time}</p>
+        <p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #007bff; text-decoration: none;">Click here to join via Google Meet</a></p>
+        <p>Please be prepared to discuss your requirements. If you have any questions, feel free to contact us.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 export {
   sendContactEmail,
   sendOrderConfirmationEmail,
@@ -315,4 +393,6 @@ export {
   sendCancelRequestDeclinedEmail,
   sendAdminCancelOrderEmail,
   sendOrderCompletedEmail,
+  sendMeetingReminderEmail,
+  generateGoogleMeetLink,
 };

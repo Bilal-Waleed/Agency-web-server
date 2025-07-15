@@ -3,13 +3,15 @@ import User from '../models/userModel.js';
 import {
   sendScheduledMeetingEmail,
   sendMeetingAcceptedEmail,
-  sendMeetingRescheduledEmail
-} from '../controllers/email-controller.js';
+  sendMeetingRescheduledEmail,
+  sendMeetingReminderEmail,
+  generateGoogleMeetLink,
+} from './email-controller.js';
 
 const deleteExpiredMeetings = async (io) => {
   try {
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); 
 
     const expiredMeetings = await ScheduledMeeting.find({
       $expr: {
@@ -28,6 +30,67 @@ const deleteExpiredMeetings = async (io) => {
     return expiredMeetings.length;
   } catch (error) {
     console.error('Failed to delete expired meetings:', error.message);
+    return 0;
+  }
+};
+
+const sendMeetingReminders = async (io) => {
+  try {
+    const now = new Date();
+    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000);
+    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000);
+
+    const upcomingMeetings = await ScheduledMeeting.find({
+      status: { $in: ['accepted', 'rescheduled'] },
+      $expr: {
+        $and: [
+          {
+            $gte: [
+              { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+              inThirtyMinutes,
+            ],
+          },
+          {
+            $lte: [
+              { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+              fiveMinutesWindow,
+            ],
+          },
+        ],
+      },
+    })
+      .populate('user', 'name email avatar')
+      .populate('service', 'title');
+
+    for (const meeting of upcomingMeetings) {
+      try {
+        const meetLink = await generateGoogleMeetLink({
+          _id: meeting._id,
+          userName: meeting.userName || meeting.user?.name,
+          userEmail: meeting.userEmail || meeting.user?.email,
+          serviceTitle: meeting.service.title,
+          date: meeting.date,
+          time: meeting.time,
+        });
+
+        await sendMeetingReminderEmail(
+          meeting.userEmail || meeting.user?.email,
+          meeting.userName || meeting.user?.name,
+          meeting.service.title,
+          meeting.date,
+          meeting.time,
+          meetLink
+        );
+
+        console.log(`Reminder sent for meeting ${meeting._id}`);
+      } catch (error) {
+        console.error(`Failed to send reminder for meeting ${meeting._id}:`, error.message);
+      }
+    }
+
+    return upcomingMeetings.length;
+  } catch (error) {
+    console.error('Failed to send meeting reminders:', error.message);
     return 0;
   }
 };
@@ -220,7 +283,6 @@ const acceptMeeting = async (req, res) => {
   }
 };
 
-
 const rescheduleMeeting = async (req, res) => {
   try {
     const { date, time } = req.body;
@@ -307,5 +369,6 @@ export {
   getScheduledMeetings,
   acceptMeeting,
   rescheduleMeeting,
-  deleteExpiredMeetings
+  deleteExpiredMeetings,
+  sendMeetingReminders,
 };
