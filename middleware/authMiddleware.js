@@ -16,10 +16,19 @@ const authMiddleware = async (req, res, next) => {
     }
 
     req.user = user;
-
     next();
+
   } catch (error) {
-    res.status(401).send({ success: false, message: 'Invalid token', details: error.message });
+    console.error('Auth Middleware Error:', error.message);
+
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).send({ success: false, message: 'Invalid token' });
+    }
+
+    if (error.name === 'MongoNetworkError' || error.message.includes('getaddrinfo ENOTFOUND')) {
+      return res.status(503).send({ success: false, message: 'Database connection failed. Please check your internet.' });
+    }
+    return res.status(500).send({ success: false, message: 'Server error', details: error.message });
   }
 };
 
