@@ -28,7 +28,6 @@ oauth2Client.setCredentials({
 
 const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-
 const generateGoogleMeetLink = async (meetingDetails) => {
   try {
     const event = {
@@ -36,11 +35,11 @@ const generateGoogleMeetLink = async (meetingDetails) => {
       description: `Service: ${meetingDetails.serviceTitle}\nScheduled meeting with ${meetingDetails.userName}`,
       start: {
         dateTime: new Date(`${meetingDetails.date}T${meetingDetails.time}`).toISOString(),
-        timeZone: 'UTC',
+        timeZone: 'Asia/Karachi',
       },
       end: {
         dateTime: new Date(new Date(`${meetingDetails.date}T${meetingDetails.time}`).getTime() + 60 * 60 * 1000).toISOString(),
-        timeZone: 'UTC',
+        timeZone: 'Asia/Karachi',
       },
       conferenceData: {
         createRequest: {
@@ -58,6 +57,7 @@ const generateGoogleMeetLink = async (meetingDetails) => {
       calendarId: 'primary',
       resource: event,
       conferenceDataVersion: 1,
+      sendUpdates: 'none', // Prevents Google from sending invitation emails
     });
 
     return response.data.hangoutLink;
@@ -65,6 +65,14 @@ const generateGoogleMeetLink = async (meetingDetails) => {
     console.error('Error generating Google Meet link:', error.message);
     throw error;
   }
+};
+
+const formatTimeToPKT = (time) => {
+  if (!time) return time;
+  const [hours, minutes] = time.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const adjustedHours = hours % 12 || 12;
+  return `${adjustedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 };
 
 const sendContactEmail = async (email, name) => {
@@ -199,7 +207,7 @@ const sendScheduledMeetingEmail = async (adminEmail, adminName, userName, servic
         <p>A new meeting has been scheduled by ${userName} for the following service:</p>
         <p><strong>Service:</strong> ${serviceTitle}</p>
         <p><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
-        <p><strong>Time:</strong> ${time}</p>
+        <p><strong>Time:</strong> ${formatTimeToPKT(time)}</p>
         <p>Please review the meeting details in the admin panel and take appropriate action to accept or reschedule the meeting.</p>
         <p>Best regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
@@ -209,10 +217,29 @@ const sendScheduledMeetingEmail = async (adminEmail, adminName, userName, servic
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Scheduled meeting email sent to ${adminEmail}`);
+  } catch (error) {
+    console.error(`Failed to send scheduled meeting email to ${adminEmail}:`, error.message);
+  }
 };
 
-const sendMeetingAcceptedEmail = async (userEmail, userName, serviceTitle, date, time) => {
+const sendMeetingAcceptedEmail = async (userEmail, userName, serviceTitle, date, time, meetingId) => {
+  let meetLink = '';
+  try {
+    meetLink = await generateGoogleMeetLink({
+      _id: meetingId,
+      userName,
+      userEmail,
+      serviceTitle,
+      date,
+      time,
+    });
+  } catch (error) {
+    console.error('Failed to generate Google Meet link for accepted email:', error.message);
+  }
+
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: userEmail,
@@ -223,7 +250,8 @@ const sendMeetingAcceptedEmail = async (userEmail, userName, serviceTitle, date,
         <p>We are pleased to confirm your meeting for the following service:</p>
         <p><strong>Service:</strong> ${serviceTitle}</p>
         <p><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
-        <p><strong>Time:</strong> ${time}</p>
+        <p><strong>Time:</strong> ${formatTimeToPKT(time)}</p>
+        ${meetLink ? `<p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #007bff; text-decoration: none;">Click here to join via Google Meet</a></p>` : ''}
         <p>Our team looks forward to discussing your requirements. Please be prepared for the meeting at the scheduled time.</p>
         <p>If you have any questions, feel free to contact us.</p>
         <p>Best regards,</p>
@@ -234,10 +262,29 @@ const sendMeetingAcceptedEmail = async (userEmail, userName, serviceTitle, date,
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Meeting accepted email sent to ${userEmail}`);
+  } catch (error) {
+    console.error(`Failed to send meeting accepted email to ${userEmail}:`, error.message);
+  }
 };
 
-const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, date, time) => {
+const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, date, time, meetingId) => {
+  let meetLink = '';
+  try {
+    meetLink = await generateGoogleMeetLink({
+      _id: meetingId,
+      userName,
+      userEmail,
+      serviceTitle,
+      date,
+      time,
+    });
+  } catch (error) {
+    console.error('Failed to generate Google Meet link for rescheduled email:', error.message);
+  }
+
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: userEmail,
@@ -248,7 +295,8 @@ const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, da
         <p>We regret to inform you that our team is unavailable at your requested meeting time. We have rescheduled your meeting for the following service:</p>
         <p><strong>Service:</strong> ${serviceTitle}</p>
         <p><strong>New Date:</strong> ${new Date(date).toLocaleDateString()}</p>
-        <p><strong>New Time:</strong> ${time}</p>
+        <p><strong>New Time:</strong> ${formatTimeToPKT(time)}</p>
+        ${meetLink ? `<p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #007bff; text-decoration: none;">Click here to join via Google Meet</a></p>` : ''}
         <p>Please confirm if the new schedule works for you. If you have any questions or need to discuss further, feel free to contact us.</p>
         <p>Best regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
@@ -258,7 +306,12 @@ const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, da
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Meeting rescheduled email sent to ${userEmail}`);
+  } catch (error) {
+    console.error(`Failed to send meeting rescheduled email to ${userEmail}:`, error.message);
+  }
 };
 
 const sendCancelRequestAcceptedEmail = async (email, name, orderId) => {
@@ -366,7 +419,7 @@ const sendMeetingReminderEmail = async (userEmail, userName, serviceTitle, date,
         <p>This is a reminder for your upcoming meeting with Bold-Zyt Digital Solutions:</p>
         <p><strong>Service:</strong> ${serviceTitle}</p>
         <p><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
-        <p><strong>Time:</strong> ${time}</p>
+        <p><strong>Time:</strong> ${formatTimeToPKT(time)}</p>
         <p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #007bff; text-decoration: none;">Click here to join via Google Meet</a></p>
         <p>Please be prepared to discuss your requirements. If you have any questions, feel free to contact us.</p>
         <p>Best regards,</p>
@@ -377,7 +430,12 @@ const sendMeetingReminderEmail = async (userEmail, userName, serviceTitle, date,
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Meeting reminder email sent to ${userEmail}`);
+  } catch (error) {
+    console.error(`Failed to send meeting reminder email to ${userEmail}:`, error.message);
+  }
 };
 
 export {

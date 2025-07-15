@@ -98,7 +98,6 @@ const sendMeetingReminders = async (io) => {
 const createScheduledMeeting = async (req, res) => {
   try {
     const { userId, serviceId, date, time } = req.body;
-    const io = req.app.get('io');
 
     const selectedDateTime = new Date(`${date}T${time}`);
     const tomorrow = new Date();
@@ -138,7 +137,7 @@ const createScheduledMeeting = async (req, res) => {
       user: userId,
       userEmail: user.email,
       userName: user.name,
-      userAvatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`, 
+      userAvatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`,
       service: serviceId,
       date,
       time,
@@ -155,23 +154,25 @@ const createScheduledMeeting = async (req, res) => {
       data: populatedMeeting,
     });
 
-    io.to('adminRoom').emit('meetingChange', populatedMeeting);
-
     const admins = await User.find({ isAdmin: true }, 'email name');
-    admins.forEach((admin) => {
-      sendScheduledMeetingEmail(
-        admin.email,
-        admin.name,
-        populatedMeeting.userName || populatedMeeting.user?.name,
-        populatedMeeting.service.title,
-        date,
-        time
-      ).catch((err) =>
-        console.error(`Failed to send email to ${admin.email}:`, err.message)
-      );
-    });
+    if (admins.length > 0) {
+      admins.forEach((admin) => {
+        sendScheduledMeetingEmail(
+          admin.email,
+          admin.name,
+          populatedMeeting.userName || populatedMeeting.user?.name,
+          populatedMeeting.service.title,
+          date,
+          time
+        ).catch((err) =>
+          console.error(`Failed to send email to ${admin.email}:`, err.message)
+        );
+      });
+    } else {
+      console.warn('No admins found to send scheduled meeting email.');
+    }
 
-    await deleteExpiredMeetings(io);
+    await deleteExpiredMeetings(); // io remove kiya
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -268,7 +269,8 @@ const acceptMeeting = async (req, res) => {
       meeting.userName || meeting.user?.name,
       meeting.service.title,
       meeting.date,
-      meeting.time
+      meeting.time,
+      meeting._id
     ).catch((err) =>
       console.error('Failed to send accepted email:', err.message)
     );
@@ -349,7 +351,8 @@ const rescheduleMeeting = async (req, res) => {
       populatedMeeting.userName || populatedMeeting.user?.name,
       populatedMeeting.service.title,
       date,
-      time
+      time,
+      populatedMeeting._id
     ).catch((err) =>
       console.error('Failed to send rescheduled email:', err.message)
     );
