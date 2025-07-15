@@ -24,13 +24,16 @@ const isAdminMiddleware = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Error in isAdminMiddleware:", error.message, error.name);
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: true, message: "Invalid or malformed token" });
+
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+      return res.status(401).json({ error: true, message: "Invalid or expired token" });
     }
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ error: true, message: "Token expired" });
+
+    if (error.name === 'MongoNetworkError' || error.message.includes('getaddrinfo ENOTFOUND')) {
+      return res.status(503).json({ error: true, message: "Database connection failed. Please check your internet." });
     }
-    res.status(500).json({ error: true, message: "Authentication failed" });
+
+    return res.status(500).json({ error: true, message: "Server error", details: error.message });
   }
 };
 
