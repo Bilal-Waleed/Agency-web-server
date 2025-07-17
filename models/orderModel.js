@@ -81,6 +81,11 @@ const orderSchema = new mongoose.Schema(
       enum: ['pending', 'completed'],
       default: 'pending',
     },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'half_paid', 'full_paid', 'failed'],
+      default: 'pending',
+    },
     initialPayment: {
       type: Number,
       required: false,
@@ -89,6 +94,10 @@ const orderSchema = new mongoose.Schema(
     remainingPaymentSessionId: {
       type: String,
       required: false,
+    },
+    tempFolder: {
+      type: String,
+      required: false, // Store temporary Cloudinary folder path
     },
   },
   { timestamps: true }

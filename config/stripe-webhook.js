@@ -1,10 +1,12 @@
 import express from 'express';
 import Stripe from 'stripe';
-import { orderForm } from '../controllers/order-controllers.js';
+import { finalizeOrder } from '../controllers/order-controllers.js';
 import { sendOrderCompletedEmail } from '../controllers/email-controller.js';
 import Order from '../models/orderModel.js';
 import User from '../models/userModel.js';
+import TempFile from '../models/tempFileModel.js';
 import jwt from 'jsonwebtoken';
+import cloudinary from '../config/cloudinary.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -14,7 +16,7 @@ router.post(
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; 
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
     let event;
 
     try {
@@ -26,13 +28,11 @@ router.post(
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
-      const { userId, orderData, orderId, fileMeta, message } = session.metadata;
+      const { userId, orderData, tempId } = session.metadata;
 
-      if (orderData) {
-
+      if (orderData && tempId) {
         const reqMock = {
           body: { sessionId: session.id },
-          files: [], 
           headers: { authorization: `Bearer ${await generateToken(userId)}` },
         };
         const resMock = {
@@ -41,8 +41,31 @@ router.post(
             json: (data) => console.log(`Order response: ${JSON.stringify(data)}`),
           }),
         };
-        await orderForm(reqMock, resMock);
-      } else if (orderId) {
+        await finalizeOrder(reqMock, resMock);
+      }
+    } else if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
+      const session = event.data.object;
+      const { tempId } = session.metadata;
+      if (tempId) {
+        const tempFile = await TempFile.findById(tempId);
+        if (tempFile) {
+          for (const file of tempFile.files) {
+            try {
+              await cloudinary.uploader.destroy(file.public_id, { resource_type: 'auto' });
+              console.log(`Deleted temporary file from Cloudinary: ${file.public_id}`);
+            } catch (error) {
+              console.error(`Failed to delete temporary file ${file.public_id}:`, error.message);
+            }
+          }
+          await TempFile.findByIdAndDelete(tempId);
+          console.log(`Deleted temporary file record: ${tempId}`);
+        }
+      }
+    } else if (event.type === 'checkout.session.async_payment_succeeded') {
+      const session = event.data.object;
+      const { orderId, userId, fileMeta, message } = session.metadata;
+
+      if (orderId) {
         const order = await Order.findById(orderId).populate('user');
         if (!order) {
           console.error('Order not found:', orderId);
@@ -58,7 +81,7 @@ router.post(
         const userEmail = user?.email || order.email;
         const parsedFileMeta = JSON.parse(fileMeta || '[]');
 
-        await Order.findByIdAndUpdate(orderId, { status: 'completed' });
+        await Order.findByIdAndUpdate(orderId, { status: 'completed', paymentStatus: 'full_paid' });
 
         await sendOrderCompletedEmail(userEmail, userName, order.orderId, message, parsedFileMeta);
 
@@ -68,7 +91,7 @@ router.post(
               await cloudinary.uploader.destroy(file.public_id, { resource_type: 'auto' });
               console.log(`Deleted file from Cloudinary: ${file.public_id}`);
             } catch (error) {
-              console.error(`Failed to delete file from Cloudinary: ${file.public_id}`, error);
+              console.error(`Failed to delete file from Cloudinary: ${file.public_id}:`, error);
             }
           }
         }
