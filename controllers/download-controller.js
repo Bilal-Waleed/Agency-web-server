@@ -1,13 +1,33 @@
-import Order from "../models/orderModel.js";
-import User from "../models/userModel.js";
-import AdmZip from "adm-zip";
-import axios from "axios";
-import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun } from "docx";
-import { sendOrderCompletedEmail } from "./email-controller.js";
-import mongoose from "mongoose";
+import Order from '../models/orderModel.js';
+import User from '../models/userModel.js';
+import mongoose from 'mongoose';
+import { sendOrderRemainingPaymentEmail } from './email-controller.js';
+import cloudinary from '../config/cloudinary.js';
+import { Readable } from 'stream';
+import Stripe from 'stripe';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
+import AdmZip from 'adm-zip';
+import axios from 'axios';
 
-const MAX_SINGLE_FILE_SIZE = 25 * 1024 * 1024; 
-const MAX_TOTAL_SIZE = 25 * 1024 * 1024;  
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const MAX_SINGLE_FILE_SIZE = 25 * 1024 * 1024;
+const MAX_TOTAL_SIZE = 25 * 1024 * 1024;
+
+const uploadToCloudinary = (fileBuffer, folderName) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: folderName,
+        resource_type: 'auto',
+      },
+      (error, result) => {
+        if (error) return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+        return resolve({ url: result.secure_url, public_id: result.public_id });
+      }
+    );
+    Readable.from(fileBuffer).pipe(uploadStream);
+  });
+};
 
 const downloadOrder = async (req, res) => {
   try {
@@ -235,35 +255,88 @@ const completeOrder = async (req, res) => {
     }
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return res.status(400).json({ error: true, message: "Invalid order ID" });
+      return res.status(400).json({ error: true, message: 'Invalid order ID' });
     }
 
     const order = await Order.findById(orderId).populate('user');
     if (!order) {
-      return res.status(404).json({ error: true, message: "Order not found" });
+      return res.status(404).json({ error: true, message: 'Order not found' });
     }
 
     let user = order.user;
     if (!user && order.email) {
       user = await User.findOne({ email: order.email });
       if (!user) {
-        console.warn("User not found by email. Proceeding with fallback.");
+        console.warn('User not found by email. Proceeding with fallback.');
       }
     }
 
     const userName = user?.name || order.name;
-    const userEmail = user?.email || order.email;
 
-    await Order.findByIdAndUpdate(orderId, { status: 'completed' });
+    const calculateHalfPayment = (budget) => {
+      if (!budget) return 0;
+      const [min, max] = budget.replace('$', '').split('-').map((val) => parseFloat(val) || 0);
+      if (budget.includes('+')) return 2500; 
+      return ((min + (max || min)) / 2) * 0.5; 
+    };
+    const remainingAmount = Math.round(calculateHalfPayment(order.projectBudget) * 100);
 
-    await sendOrderCompletedEmail(userEmail, userName, order.orderId, message, files);
+    const folderName = `completed_orders/${order.orderId}_${Date.now()}`;
+    const fileUploads = files.map(async (file) => {
+      try {
+        const result = await uploadToCloudinary(file.buffer, folderName, file.mimetype);
+        return {
+          name: file.originalname,
+          url: result.url,
+          type: file.mimetype,
+          public_id: result.public_id,
+        };
+      } catch (error) {
+        console.error(`Cloudinary upload failed: ${file.originalname}`, error.message);
+        return null;
+      }
+    });
 
-    res.status(200).json({ error: false, message: "Order completed successfully" });
+    const fileMeta = (await Promise.all(fileUploads)).filter(Boolean);
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Remaining Payment for Order ${order.orderId}`,
+            },
+            unit_amount: remainingAmount,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/order`,
+      metadata: {
+        orderId: order._id.toString(),
+        userId: order.user.toString(),
+        fileMeta: JSON.stringify(fileMeta),
+        message: message || '',
+      },
+    });
+
+    await Order.findByIdAndUpdate(orderId, {
+      completedFiles: fileMeta,
+      remainingPaymentSessionId: session.id,
+    });
+
+    await sendOrderRemainingPaymentEmail(userEmail, userName, order.orderId, message, session.url);
+
+    res.status(200).json({ error: false, message: 'Order completion initiated. Payment link sent to user.' });
   } catch (error) {
-    console.error("Error completing order:", error);
+    console.error('Error completing order:', error);
     res.status(500).json({
       error: true,
-      message: "Failed to complete order",
+      message: 'Failed to complete order',
       details: error.message,
     });
   }

@@ -11,7 +11,7 @@ import {
 const deleteExpiredMeetings = async (io) => {
   try {
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); 
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
     const expiredMeetings = await ScheduledMeeting.find({
       $expr: {
@@ -24,7 +24,11 @@ const deleteExpiredMeetings = async (io) => {
 
     for (const meeting of expiredMeetings) {
       await ScheduledMeeting.deleteOne({ _id: meeting._id });
-      io.to('adminRoom').emit('meetingDeleted', meeting._id);
+      if (io && typeof io.to === 'function') {
+        io.to('adminRoom').emit('meetingDeleted', meeting._id);
+      } else {
+        console.warn('Socket.IO instance not available, skipping meetingDeleted emit');
+      }
     }
 
     return expiredMeetings.length;
@@ -99,6 +103,13 @@ const createScheduledMeeting = async (req, res) => {
   try {
     const { userId, serviceId, date, time } = req.body;
 
+    if (!userId || !serviceId || !date || !time) {
+      return res.status(400).send({
+        success: false,
+        message: 'Missing required fields',
+      });
+    }
+
     const selectedDateTime = new Date(`${date}T${time}`);
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -153,7 +164,6 @@ const createScheduledMeeting = async (req, res) => {
       message: 'Meeting scheduled successfully',
       data: populatedMeeting,
     });
-
     const admins = await User.find({ isAdmin: true }, 'email name');
     if (admins.length > 0) {
       admins.forEach((admin) => {
@@ -172,13 +182,23 @@ const createScheduledMeeting = async (req, res) => {
       console.warn('No admins found to send scheduled meeting email.');
     }
 
-    await deleteExpiredMeetings(); // io remove kiya
+    const io = req.app.get('io');
+    if (io && typeof io.to === 'function') {
+      await deleteExpiredMeetings(io);
+    } else {
+      console.warn('Socket.IO instance not available, skipping deleteExpiredMeetings');
+      await deleteExpiredMeetings();
+    }
   } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: 'Failed to schedule meeting',
-      details: error.message,
-    });
+    if (!res.headersSent) {
+      res.status(500).send({
+        success: false,
+        message: 'Failed to schedule meeting',
+        details: error.message,
+      });
+    } else {
+      console.error('Headers already sent, skipping response:', error.message);
+    }
   }
 };
 
@@ -230,18 +250,21 @@ const getScheduledMeetings = async (req, res) => {
       totalPages,
     });
   } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: 'Failed to fetch meetings',
-      details: error.message,
-    });
+    if (!res.headersSent) {
+      res.status(500).send({
+        success: false,
+        message: 'Failed to fetch meetings',
+        details: error.message,
+      });
+    } else {
+      console.error('Headers already sent, skipping response:', error.message);
+    }
   }
 };
 
 const acceptMeeting = async (req, res) => {
   try {
     const io = req.app.get('io');
-
     const meeting = await ScheduledMeeting.findById(req.params.id)
       .populate('user', 'name email avatar')
       .populate('service', 'title');
@@ -259,10 +282,14 @@ const acceptMeeting = async (req, res) => {
       data: meeting,
     });
 
-    io.to('adminRoom').emit('meetingUI', {
-      action: 'update',
-      data: meeting,
-    });
+    if (io && typeof io.to === 'function') {
+      io.to('adminRoom').emit('meetingUI', {
+        action: 'update',
+        data: meeting,
+      });
+    } else {
+      console.warn('Socket.IO instance not available, skipping meetingUI emit');
+    }
 
     sendMeetingAcceptedEmail(
       meeting.userEmail || meeting.user?.email,
@@ -275,13 +302,22 @@ const acceptMeeting = async (req, res) => {
       console.error('Failed to send accepted email:', err.message)
     );
 
-    await deleteExpiredMeetings(io);
+    if (io && typeof io.to === 'function') {
+      await deleteExpiredMeetings(io);
+    } else {
+      console.warn('Socket.IO instance not available, skipping deleteExpiredMeetings');
+      await deleteExpiredMeetings();
+    }
   } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: 'Failed to accept meeting',
-      details: error.message,
-    });
+    if (!res.headersSent) {
+      res.status(500).send({
+        success: false,
+        message: 'Failed to accept meeting',
+        details: error.message,
+      });
+    } else {
+      console.error('Headers already sent, skipping response:', error.message);
+    }
   }
 };
 
@@ -289,6 +325,13 @@ const rescheduleMeeting = async (req, res) => {
   try {
     const { date, time } = req.body;
     const io = req.app.get('io');
+
+    if (!date || !time) {
+      return res.status(400).send({
+        success: false,
+        message: 'Date and time are required',
+      });
+    }
 
     const selectedDateTime = new Date(`${date}T${time}`);
     const tomorrow = new Date();
@@ -340,11 +383,15 @@ const rescheduleMeeting = async (req, res) => {
       message: 'Meeting rescheduled successfully',
       data: populatedMeeting,
     });
-    
-    io.to('adminRoom').emit('meetingUI', {
-      action: 'update',
-      data: populatedMeeting,
-    });
+
+    if (io && typeof io.to === 'function') {
+      io.to('adminRoom').emit('meetingUI', {
+        action: 'update',
+        data: populatedMeeting,
+      });
+    } else {
+      console.warn('Socket.IO instance not available, skipping meetingUI emit');
+    }
 
     sendMeetingRescheduledEmail(
       populatedMeeting.userEmail || populatedMeeting.user?.email,
@@ -357,13 +404,22 @@ const rescheduleMeeting = async (req, res) => {
       console.error('Failed to send rescheduled email:', err.message)
     );
 
-    await deleteExpiredMeetings(io);
+    if (io && typeof io.to === 'function') {
+      await deleteExpiredMeetings(io);
+    } else {
+      console.warn('Socket.IO instance not available, skipping deleteExpiredMeetings');
+      await deleteExpiredMeetings(); 
+    }
   } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: 'Failed to reschedule meeting',
-      details: error.message,
-    });
+    if (!res.headersSent) {
+      res.status(500).send({
+        success: false,
+        message: 'Failed to reschedule meeting',
+        details: error.message,
+      });
+    } else {
+      console.error('Headers already sent, skipping response:', error.message);
+    }
   }
 };
 

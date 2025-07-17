@@ -1,6 +1,6 @@
-import nodemailer from "nodemailer";
-import dotenv from "dotenv";
-import { google } from "googleapis";
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+import { google } from 'googleapis';
 
 dotenv.config();
 
@@ -15,11 +15,10 @@ const transporter = nodemailer.createTransport({
   debug: false,
 });
 
-// Google Calendar API setup
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  "https://developers.google.com/oauthplayground"
+  'https://developers.google.com/oauthplayground'
 );
 
 oauth2Client.setCredentials({
@@ -38,7 +37,9 @@ const generateGoogleMeetLink = async (meetingDetails) => {
         timeZone: 'Asia/Karachi',
       },
       end: {
-        dateTime: new Date(new Date(`${meetingDetails.date}T${meetingDetails.time}`).getTime() + 60 * 60 * 1000).toISOString(),
+        dateTime: new Date(
+          new Date(`${meetingDetails.date}T${meetingDetails.time}`).getTime() + 60 * 60 * 1000
+        ).toISOString(),
         timeZone: 'Asia/Karachi',
       },
       conferenceData: {
@@ -47,17 +48,14 @@ const generateGoogleMeetLink = async (meetingDetails) => {
           conferenceSolutionKey: { type: 'hangoutsMeet' },
         },
       },
-      attendees: [
-        { email: meetingDetails.userEmail },
-        { email: process.env.EMAIL_USER },
-      ],
+      attendees: [{ email: meetingDetails.userEmail }, { email: process.env.EMAIL_USER }],
     };
 
     const response = await calendar.events.insert({
       calendarId: 'primary',
       resource: event,
       conferenceDataVersion: 1,
-      sendUpdates: 'none', // Prevents Google from sending invitation emails
+      sendUpdates: 'none',
     });
 
     return response.data.hangoutLink;
@@ -79,7 +77,7 @@ const sendContactEmail = async (email, name) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Thank You for Contacting Us!",
+    subject: 'Thank You for Contacting Us!',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
@@ -101,20 +99,71 @@ const sendOrderConfirmationEmail = async (email, name, orderDetails) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Order Confirmation - Bold-Zyt Digital Solutions",
+    subject: 'Order Confirmation - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
         <p>Thank you for placing an order with our Bold-Zyt Digital Solutions agency. We are excited to work on your project!</p>
         <p><strong>Order ID:</strong> ${orderDetails.orderId}</p>
+        <p><strong>Initial Payment:</strong> $${orderDetails.initialPayment.toFixed(2)}</p>
         <p><strong>Order Details:</strong></p>
         <ul>
           <li>Order Type: ${orderDetails.projectType || 'N/A'}</li>
           <li>File: ${orderDetails.files || 'No file uploaded'}</li>
         </ul>
-        <p>Our team will review your requirements and project details. Based on your specifications, we will provide a detailed pricing quote and timeline. One of our representatives will contact you shortly to discuss the next steps.</p>
-        <p><strong>Payment Terms:</strong> To confirm your order, we require an initial 50% payment. The remaining balance will be due upon project completion.</p>
+        <p>Our team will review your requirements and project details. One of our representatives will contact you shortly to discuss the next steps.</p>
+        <p><strong>Payment Terms:</strong> You have paid 50% of the project cost. The remaining balance will be due upon project completion.</p>
         <p>We look forward to delivering a solution that exceeds your expectations.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+const sendOrderRemainingPaymentEmail = async (email, name, orderId, message, paymentLink) => {
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: 'Order Completion - Remaining Payment Required',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>Your order (Order ID: ${orderId}) is ready for delivery!</p>
+        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
+        <p>Please complete the remaining 50% payment to receive your project files:</p>
+        <p><a href="${paymentLink}" style="color: #007bff; text-decoration: none;">Complete Payment</a></p>
+        <p>Once the payment is confirmed, we will send you the project files.</p>
+        <p>Thank you for choosing Bold-Zyt Digital Solutions.</p>
+        <p>Best regards,</p>
+        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
+        Email: boldzyt.ds@gmail.com<br>
+        Website: www.boldzytdigital.com</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+const sendOrderCompletedEmail = async (email, name, orderId, message, files) => {
+  const fileList = files.map((file) => `<li><a href="${file.url}">${file.name}</a></li>`).join('');
+  const mailOptions = {
+    from: `${process.env.EMAIL_USER}`,
+    to: email,
+    subject: 'Order Completed - Bold-Zyt Digital Solutions',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Dear ${name},</h2>
+        <p>We are pleased to inform you that your order (Order ID: ${orderId}) has been successfully completed!</p>
+        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
+        <p>Please find the delivered files below:</p>
+        <ul>${fileList}</ul>
+        <p>Thank you for choosing Bold-Zyt Digital Solutions. We hope you are satisfied with our services. If you have any feedback or need further assistance, please feel free to contact us.</p>
         <p>Best regards,</p>
         <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
         Email: boldzyt.ds@gmail.com<br>
@@ -130,7 +179,7 @@ const sendRegistrationEmail = async (email, name) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Welcome to Bold-Zyt Digital Solutions Agency!",
+    subject: 'Welcome to Bold-Zyt Digital Solutions Agency!',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Welcome, ${name}!</h2>
@@ -154,7 +203,7 @@ const sendOTPVerificationEmail = async (email, name, otp) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "OTP Verification - Bold-Zyt Digital Solutions",
+    subject: 'OTP Verification - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
@@ -177,7 +226,7 @@ const sendPasswordResetEmail = async (email, name, resetLink) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Password Reset Request",
+    subject: 'Password Reset Request',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Password Reset Request</h2>
@@ -200,7 +249,7 @@ const sendScheduledMeetingEmail = async (adminEmail, adminName, userName, servic
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: adminEmail,
-    subject: "New Meeting Scheduled - Bold-Zyt Digital Solutions",
+    subject: 'New Meeting Scheduled - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${adminName},</h2>
@@ -243,7 +292,7 @@ const sendMeetingAcceptedEmail = async (userEmail, userName, serviceTitle, date,
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: userEmail,
-    subject: "Meeting Confirmation - Bold-Zyt Digital Solutions",
+    subject: 'Meeting Confirmation - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${userName},</h2>
@@ -288,7 +337,7 @@ const sendMeetingRescheduledEmail = async (userEmail, userName, serviceTitle, da
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: userEmail,
-    subject: "Meeting Rescheduled - Bold-Zyt Digital Solutions",
+    subject: 'Meeting Rescheduled - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${userName},</h2>
@@ -318,7 +367,7 @@ const sendCancelRequestAcceptedEmail = async (email, name, orderId) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Order Cancellation Request Accepted - Bold-Zyt Digital Solutions",
+    subject: 'Order Cancellation Request Accepted - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
@@ -340,7 +389,7 @@ const sendCancelRequestDeclinedEmail = async (email, name, orderId) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Order Cancellation Request Declined - Bold-Zyt Digital Solutions",
+    subject: 'Order Cancellation Request Declined - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
@@ -362,7 +411,7 @@ const sendAdminCancelOrderEmail = async (email, name, orderId, reason) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: email,
-    subject: "Order Cancelled by Admin - Bold-Zyt Digital Solutions",
+    subject: 'Order Cancelled by Admin - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${name},</h2>
@@ -381,38 +430,11 @@ const sendAdminCancelOrderEmail = async (email, name, orderId, reason) => {
   await transporter.sendMail(mailOptions);
 };
 
-const sendOrderCompletedEmail = async (email, name, orderId, message, files) => {
-  const mailOptions = {
-    from: `${process.env.EMAIL_USER}`,
-    to: email,
-    subject: "Order Completed - Bold-Zyt Digital Solutions",
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #2c3e50;">Dear ${name},</h2>
-        <p>We are pleased to inform you that your order (Order ID: ${orderId}) has been successfully completed!</p>
-        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
-        <p>Please find the delivered files attached to this email. You can download and save them for your records.</p>
-        <p>Thank you for choosing Bold-Zyt Digital Solutions. We hope you are satisfied with our services. If you have any feedback or need further assistance, please feel free to contact us.</p>
-        <p>Best regards,</p>
-        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
-        Email: boldzyt.ds@gmail.com<br>
-        Website: www.boldzytdigital.com</p>
-      </div>
-    `,
-    attachments: files.map((file) => ({
-      filename: file.originalname,
-      content: file.buffer,
-    })),
-  };
-
-  await transporter.sendMail(mailOptions);
-};
-
 const sendMeetingReminderEmail = async (userEmail, userName, serviceTitle, date, time, meetLink) => {
   const mailOptions = {
     from: `${process.env.EMAIL_USER}`,
     to: userEmail,
-    subject: "Meeting Reminder - Bold-Zyt Digital Solutions",
+    subject: 'Meeting Reminder - Bold-Zyt Digital Solutions',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2c3e50;">Dear ${userName},</h2>
@@ -453,4 +475,5 @@ export {
   sendOrderCompletedEmail,
   sendMeetingReminderEmail,
   generateGoogleMeetLink,
+  sendOrderRemainingPaymentEmail,
 };

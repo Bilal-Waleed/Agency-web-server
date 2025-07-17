@@ -5,7 +5,7 @@ const serviceSchema = z.object({
   provider: z.string().min(3, 'Provider name must be at least 3 characters').max(100, 'Provider name is too long'),
   shortDesc: z.string().min(10, 'Short description must be at least 10 characters').max(200, 'Short description is too long'),
   fullDesc: z.string().min(50, 'Full description must be at least 50 characters').max(2000, 'Full description is too long'),
-  image: z.string().optional(), // Made optional since file upload is handled separately
+  image: z.string().optional(), 
   minTime: z.string().min(1, 'Minimum time is required'),
   budget: z.string().min(1, 'Budget is required'),
   faqs: z

@@ -19,7 +19,7 @@ const orderSchema = z.object({
     }),
     projectDescription: z.string().min(10, 'Project description must be at least 10 characters').max(500, 'Project description must be less than 500 characters'),
     paymentReference: z.string().min(1, 'Payment reference is required'),
-    paymentMethod: z.enum(['JazzCash', 'Bank Transfer'], {
+    paymentMethod: z.enum(['JazzCash', 'Bank Transfer', 'Stripe'], {
         errorMap: () => ({ message: 'Payment method is required' })
     }),
     file: z.any().optional()
