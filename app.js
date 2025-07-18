@@ -12,7 +12,7 @@ import { setupChangeStream } from './socket/changeStream.js';
 import adminRouter from './router/admin-router.js';
 import scheduledMeetingRouter from './router/scheduledMeeting-router.js';
 import notificationRoutes from './router/notificationRoutes.js';
-import stripeWebhookRouter from './config/stripe-webhook.js';
+import stripeWebhookRouter from './config/stripe-webhook.js'
 
 dotenv.config();
 const app = express();
@@ -30,16 +30,16 @@ app.set('io', io);
 
 io.on('connection', (socket) => {
   console.log('A client connected:', socket.id);
-  socket.join('adminRoom'); 
+  socket.join('adminRoom');
   socket.on('disconnect', () => {
     console.log('A client disconnected:', socket.id);
   });
 });
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
+app.use('/api/stripe/webhook', stripeWebhookRouter);
 app.use(express.json());
 
-app.use('/api/stripe', stripeWebhookRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/order', orderRouter);
@@ -49,13 +49,20 @@ app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/images', express.static('public/images'));
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err.message);
+  res.status(500).json({ error: true, message: 'Internal server error', details: err.message });
+});
+
 (async () => {
   try {
     await connectDB();
     console.log('Connected to MongoDB');
     setupChangeStream(io);
   } catch (error) {
-    console.error('Failed to set up server:', error.message);
+    console.error('Failed to connect to MongoDB:', error.message);
+    process.exit(1);
   }
 })();
 

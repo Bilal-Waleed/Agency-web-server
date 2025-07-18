@@ -13,20 +13,72 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const MAX_SINGLE_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 25 * 1024 * 1024;
 
-const uploadToCloudinary = (fileBuffer, folderName) => {
+const retryOperation = async (operation, retries = 3, delay = 1000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === retries) throw error;
+      console.warn(`⚠️ Attempt ${attempt} failed: ${error.message}. Retrying...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
+const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) => {
   return new Promise((resolve, reject) => {
+    const getResourceType = (mime) => {
+      if (mime.startsWith('image/')) return 'image';
+      if (
+        mime === 'application/pdf' ||
+        mime === 'application/zip' ||
+        mime === 'application/x-zip-compressed' ||
+        mime === 'application/msword' ||
+        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) return 'raw';
+      if (mime.startsWith('video/')) return 'video';
+      return 'raw';
+    };
+
+    const resource_type = getResourceType(mimetype);
+    const safeFileName = fileName.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+    const public_id = `${folderName}/${safeFileName.split('.').slice(0, -1).join('.')}`; // Remove extension for images
+
+    console.log(`ℹ️ Uploading to Cloudinary: ${public_id} [${resource_type}]`);
+
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: folderName,
-        resource_type: 'auto',
+        public_id,
+        resource_type,
+        timeout: 120000,
       },
       (error, result) => {
-        if (error) return reject(new Error(`Cloudinary upload failed: ${error.message}`));
-        return resolve({ url: result.secure_url, public_id: result.public_id });
+        if (error) {
+          console.error('Cloudinary error details:', JSON.stringify(error, null, 2));
+          return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+        }
+        cloudinary.api.resource(result.public_id, { resource_type })
+          .then(() => resolve({
+            url: result.secure_url,
+            public_id: result.public_id,
+            resource_type,
+          }))
+          .catch(err => {
+            console.error(`❌ Failed to verify uploaded file ${result.public_id}:`, err.message);
+            reject(err);
+          });
       }
     );
     Readable.from(fileBuffer).pipe(uploadStream);
   });
+};
+
+const calculateHalfPayment = (budget) => {
+  if (!budget) return 0;
+  const [min, max] = budget.replace('$', '').split('-').map((val) => parseFloat(val) || 0);
+  if (budget.includes('+')) return 2500;
+  return ((min + (max || min)) / 2) * 0.5;
 };
 
 const downloadOrder = async (req, res) => {
@@ -272,24 +324,22 @@ const completeOrder = async (req, res) => {
     }
 
     const userName = user?.name || order.name;
+    const userEmail = user?.email || order.email;
 
-    const calculateHalfPayment = (budget) => {
-      if (!budget) return 0;
-      const [min, max] = budget.replace('$', '').split('-').map((val) => parseFloat(val) || 0);
-      if (budget.includes('+')) return 2500; 
-      return ((min + (max || min)) / 2) * 0.5; 
-    };
     const remainingAmount = Math.round(calculateHalfPayment(order.projectBudget) * 100);
 
     const folderName = `completed_orders/${order.orderId}_${Date.now()}`;
     const fileUploads = files.map(async (file) => {
       try {
-        const result = await uploadToCloudinary(file.buffer, folderName, file.mimetype);
+        const result = await retryOperation(() =>
+          uploadToCloudinary(file.buffer, folderName, file.mimetype, file.originalname)
+        );
         return {
           name: file.originalname,
           url: result.url,
           type: file.mimetype,
           public_id: result.public_id,
+          resource_type: result.resource_type || 'raw',
         };
       } catch (error) {
         console.error(`Cloudinary upload failed: ${file.originalname}`, error.message);
@@ -318,7 +368,7 @@ const completeOrder = async (req, res) => {
       cancel_url: `${process.env.FRONTEND_URL}/order`,
       metadata: {
         orderId: order._id.toString(),
-        userId: order.user.toString(),
+        userId: order.user ? order.user._id.toString() : 'anonymous',
         fileMeta: JSON.stringify(fileMeta),
         message: message || '',
       },
@@ -329,9 +379,19 @@ const completeOrder = async (req, res) => {
       remainingPaymentSessionId: session.id,
     });
 
-    await sendOrderRemainingPaymentEmail(userEmail, userName, order.orderId, message, session.url);
+    try {
+      await retryOperation(() =>
+        sendOrderRemainingPaymentEmail(userEmail, userName, order.orderId, message, session.url)
+      );
+      console.log(`Remaining payment email sent to ${userEmail} for order ${order.orderId}`);
+    } catch (emailError) {
+      console.error(`Failed to send remaining payment email for order ${order.orderId}:`, emailError.message);
+    }
 
-    res.status(200).json({ error: false, message: 'Order completion initiated. Payment link sent to user.' });
+    res.status(200).json({
+      error: false,
+      message: 'Order completion initiated. Payment link sent to user.',
+    });
   } catch (error) {
     console.error('Error completing order:', error);
     res.status(500).json({

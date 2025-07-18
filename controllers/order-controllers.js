@@ -2,13 +2,15 @@ import Order from "../models/orderModel.js";
 import TempFile from "../models/tempFileModel.js"; 
 import orderSchema from "../validators/order-schema.js";
 import jwt from 'jsonwebtoken';
-import { sendOrderConfirmationEmail } from "./email-controller.js";
+import { sendOrderConfirmationEmail, sendOrderCompletedEmail } from "./email-controller.js";
 import User from "../models/userModel.js";
 import cloudinary from "../config/cloudinary.js";
 import { Readable } from "stream";
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import mongoose from "mongoose";
 dotenv.config();
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const retryOperation = async (operation, retries = 3, delay = 1000) => {
@@ -38,7 +40,7 @@ const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) => {
 
     const resource_type = getResourceType(mimetype);
     const safeFileName = fileName.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-    const public_id = `${folderName}/${safeFileName.split('.').slice(0, -1).join('.')}`; // Remove extension for images
+    const public_id = `${folderName}/${safeFileName.split('.').slice(0, -1).join('.')}`; 
 
     console.log(`ℹ️ Uploading to Cloudinary: ${public_id} [${resource_type}]`);
 
@@ -54,7 +56,6 @@ const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) => {
           console.error('Cloudinary error details:', JSON.stringify(error, null, 2));
           return reject(new Error(`Cloudinary upload failed: ${error.message}`));
         }
-        // Verify resource exists
         cloudinary.api.resource(result.public_id, { resource_type })
           .then(() => resolve({
             url: result.secure_url,
@@ -95,6 +96,147 @@ const generateOrderId = async () => {
     }
   }
   return orderId;
+};
+
+const checkSession = async (req, res) => {
+  const { sessionId } = req.params;
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    console.log(`ℹ️ Checking session ${sessionId}:`, session.status);
+
+    if (session.status === 'complete' && session.payment_status === 'paid') {
+      const { orderId, fileMeta, orderData, tempId, userId, message } = session.metadata;
+
+      // Check if this is a remaining payment session
+      if (orderId && fileMeta) {
+        // Remaining payment session
+        if (!mongoose.Types.ObjectId.isValid(orderId)) {
+          console.error('❌ Invalid order ID:', orderId);
+          return res.status(400).json({ error: 'Invalid order ID', isRemainingPayment: true });
+        }
+
+        const order = await Order.findById(orderId).populate('user');
+        if (!order) {
+          console.error('❌ Order not found:', orderId);
+          return res.status(404).json({ error: 'Order not found', isRemainingPayment: true });
+        }
+        console.log(`ℹ️ Order found: ${order.orderId}`);
+
+        // Check if order is already completed
+        if (order.status === 'completed') {
+          console.log(`ℹ️ Order ${order.orderId} already completed`);
+          return res.status(200).json({ success: true, isRemainingPayment: true });
+        }
+
+        let user = order.user;
+        if (!user && order.email) {
+          user = await User.findOne({ email: order.email });
+          if (!user) {
+            console.warn(`⚠️ User not found for email: ${order.email}. Using order details.`);
+          }
+        }
+
+        const userName = user?.name || order.name;
+        const userEmail = user?.email || order.email;
+        console.log(`ℹ️ User details - Name: ${userName}, Email: ${userEmail}`);
+
+        let parsedFileMeta;
+        try {
+          parsedFileMeta = JSON.parse(fileMeta || '[]');
+          if (!Array.isArray(parsedFileMeta)) {
+            throw new Error('Invalid file metadata format');
+          }
+          console.log(`ℹ️ Parsed fileMeta:`, JSON.stringify(parsedFileMeta, null, 2));
+        } catch (error) {
+          console.error('❌ Failed to parse fileMeta:', error.message);
+          return res.status(400).json({ error: 'Invalid file metadata', isRemainingPayment: true });
+        }
+        try {
+          await Order.findByIdAndUpdate(
+            orderId,
+            {
+              status: 'completed',
+              paymentStatus: 'full_paid',
+              remainingPaymentSessionId: null,
+            },
+            { new: true }
+          );
+          console.log(`✅ Order ${order.orderId} updated to completed`);
+        } catch (error) {
+          console.error(`❌ Failed to update order ${order.orderId}:`, error.message);
+          return res.status(500).json({ error: 'Failed to update order', isRemainingPayment: true });
+        }
+
+        try {
+          await retryOperation(() =>
+            sendOrderCompletedEmail(userEmail, userName, order.orderId, message, parsedFileMeta)
+          );
+          console.log(`✅ Order completion email sent to ${userEmail} for order ${order.orderId}`);
+        } catch (emailError) {
+          console.error(`❌ Failed to send order completion email for order ${order.orderId}:`, emailError.message);
+        }
+        try {
+          for (const file of parsedFileMeta) {
+            if (file.public_id) {
+              await retryOperation(() =>
+                cloudinary.uploader.destroy(file.public_id, {
+                  resource_type: file.resource_type || 'auto',
+                })
+              );
+              console.log(`✅ Deleted file from Cloudinary: ${file.public_id}`);
+            } else {
+              console.warn(`⚠️ No public_id for file: ${file.name}`);
+            }
+          }
+
+          if (parsedFileMeta.length > 0 && parsedFileMeta[0].public_id) {
+          const publicId = parsedFileMeta[0].public_id;
+          console.log(`📂 Raw public_id: ${publicId}`);
+          const matches = publicId.match(/(completed_orders\/[A-Z0-9_]+_\d+)/);
+          const folderPath = matches ? matches[1] : publicId.substring(0, publicId.lastIndexOf('/'));
+            try {
+              const result = await retryOperation(() => cloudinary.api.delete_folder(folderPath));
+              console.log(`✅ Deleted folder from Cloudinary: ${folderPath}`, result);
+            } catch (folderError) {
+              console.error(`❌ Failed to delete Cloudinary folder ${folderPath}:`, folderError.message || 'Unknown error');
+            }
+          } else {
+            console.warn(`⚠️ No public_id found for order ${order.orderId}. Skipping folder deletion.`);
+          }
+        } catch (cloudinaryError) {
+          console.error(`❌ Failed to delete files or folder from Cloudinary for order ${order.orderId}:`, cloudinaryError.message || 'Unknown error');
+        }
+
+        // Emit Socket.IO event
+        try {
+          const io = req.app.get('io');
+          if (!io) {
+            console.error('❌ Socket.IO server not initialized');
+          } else {
+            io.to('adminRoom').emit('orderCompleted', { orderId: order.orderId });
+            console.log(`✅ Emitted orderCompleted event for order ${order.orderId}`);
+          }
+        } catch (socketError) {
+          console.error(`❌ Failed to emit Socket.IO event for order ${order.orderId}:`, socketError.message);
+        }
+
+        return res.status(200).json({ success: true, isRemainingPayment: true });
+      } else if (orderData && tempId && userId) {
+        // Initial payment session
+        return res.status(200).json({ success: true, isRemainingPayment: false });
+      } else {
+        console.error(`❌ Invalid session metadata:`, session.metadata);
+        return res.status(400).json({ error: 'Invalid session metadata', isRemainingPayment: false });
+      }
+    } else {
+      console.error(`❌ Session not completed or not paid: ${session.status}, ${session.payment_status}`);
+      return res.status(400).json({ error: 'Payment not completed', isRemainingPayment: false });
+    }
+  } catch (error) {
+    console.error(`❌ Error checking session ${sessionId}:`, error.message);
+    return res.status(500).json({ error: 'Internal Server Error', isRemainingPayment: false });
+  }
 };
 
 const createCheckoutSession = async (req, res) => {
@@ -468,7 +610,7 @@ const finalizeOrder = async (req, res) => {
     }
 
     if (tempFile.files.length > 0 && fileMeta.length < tempFile.files.length) {
-      console.warn('⚠️ Some files were not transferred to permanent folder:', failedFiles);
+      console.warn('Some files were not transferred to permanent folder:', failedFiles);
       return res.status(200).send({
         message: 'Order submitted successfully, but some files were not transferred',
         orderId,
@@ -489,7 +631,7 @@ const finalizeOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('❌ Order finalization failed:', error.message, error);
+    console.error('Order finalization failed:', error.message, error);
     res.status(500).send({ error: 'Order finalization failed', details: error.message });
   }
 };
@@ -524,4 +666,4 @@ const getUserOrders = async (req, res) => {
   }
 };
 
-export { orderForm, getUserOrders, createCheckoutSession, finalizeOrder };
+export { orderForm, getUserOrders, createCheckoutSession, finalizeOrder, checkSession };
