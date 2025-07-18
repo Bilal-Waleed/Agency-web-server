@@ -2,34 +2,46 @@ import cron from 'node-cron';
 import { sendMeetingReminders } from '../controllers/scheduledMeetingController.js';
 import TempFile from '../models/tempFileModel.js';
 import cloudinary from '../config/cloudinary.js';
+import { retryOperation } from '../utils/cloudinary.js';
 
 export const startCronJob = (io) => {
-  // Meeting reminders (existing)
   cron.schedule('*/10 * * * *', async () => {
     console.log('Checking for upcoming meetings...');
-    const count = await sendMeetingReminders(io);
-    console.log(`Processed ${count} meeting reminders`);
+    try {
+      const count = await sendMeetingReminders(io);
+      console.log(`Processed ${count} meeting reminders`);
+    } catch (error) {
+      console.error('Error processing meeting reminders:', error.message);
+    }
   }, {
     scheduled: true,
     timezone: 'Asia/Karachi',
   });
 
-  // Cleanup temporary files
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('*/10 * * * *', async () => {
     console.log('Checking for expired temporary files...');
     try {
+      const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const expiredFiles = await TempFile.find({
-        expiresAt: { $lte: new Date() },
+        createdAt: { $lte: threshold }, 
       });
 
       for (const tempFile of expiredFiles) {
         for (const file of tempFile.files) {
           try {
-            await cloudinary.uploader.destroy(file.public_id, { resource_type: 'auto' });
+            await retryOperation(() =>
+              cloudinary.uploader.destroy(file.public_id, { resource_type: file.resource_type || 'auto' })
+            );
             console.log(`Deleted temporary file from Cloudinary: ${file.public_id}`);
           } catch (error) {
             console.error(`Failed to delete temporary file ${file.public_id}:`, error.message);
           }
+        }
+        try {
+          await retryOperation(() => cloudinary.api.delete_folder(tempFile.tempFolder));
+          console.log(`Deleted temporary folder from Cloudinary: ${tempFile.tempFolder}`);
+        } catch (error) {
+          console.error(`Failed to delete folder ${tempFile.tempFolder}:`, error.message);
         }
         await TempFile.findByIdAndDelete(tempFile._id);
         console.log(`Deleted temporary file record: ${tempFile._id}`);

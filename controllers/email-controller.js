@@ -176,20 +176,20 @@ const sendOrderCompletedEmail = async (email, name, orderId, message, files) => 
       }
 
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        const ext = name.split('.').pop().toLowerCase();
-        const buffer = await res.buffer();
-        const contentType = mimeTypes[ext] || `application/${format || 'octet-stream'}`;
+      const ext = name.split('.').pop().toLowerCase();
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);  
+      const contentType = mimeTypes[ext] || `application/${format || 'octet-stream'}`;
 
-        attachments.push({ filename: name, content: buffer, contentType });
-        console.log(`Attached: ${name}`);
-      } catch (err) {
-        console.error(`Failed to fetch ${name}:`, err.message);
+      attachments.push({ filename: name, content: buffer, contentType });
+      console.log(`Attached: ${name}`);
+    } catch (err) {
+      console.error(`Failed to fetch ${name}:`, err.message);
       }
     }
-
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2>Dear ${name},</h2>

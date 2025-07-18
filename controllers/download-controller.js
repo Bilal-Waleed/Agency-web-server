@@ -2,84 +2,16 @@ import Order from '../models/orderModel.js';
 import User from '../models/userModel.js';
 import mongoose from 'mongoose';
 import { sendOrderRemainingPaymentEmail } from './email-controller.js';
-import cloudinary from '../config/cloudinary.js';
-import { Readable } from 'stream';
 import Stripe from 'stripe';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
 import AdmZip from 'adm-zip';
 import axios from 'axios';
+import { calculateHalfPayment } from '../utils/payment.js';
+import { retryOperation, uploadToCloudinary } from '../utils/cloudinary.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const MAX_SINGLE_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 25 * 1024 * 1024;
-
-const retryOperation = async (operation, retries = 3, delay = 1000) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (attempt === retries) throw error;
-      console.warn(`⚠️ Attempt ${attempt} failed: ${error.message}. Retrying...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-};
-
-const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) => {
-  return new Promise((resolve, reject) => {
-    const getResourceType = (mime) => {
-      if (mime.startsWith('image/')) return 'image';
-      if (
-        mime === 'application/pdf' ||
-        mime === 'application/zip' ||
-        mime === 'application/x-zip-compressed' ||
-        mime === 'application/msword' ||
-        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      ) return 'raw';
-      if (mime.startsWith('video/')) return 'video';
-      return 'raw';
-    };
-
-    const resource_type = getResourceType(mimetype);
-    const safeFileName = fileName.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-    const public_id = `${folderName}/${safeFileName.split('.').slice(0, -1).join('.')}`; // Remove extension for images
-
-    console.log(`ℹ️ Uploading to Cloudinary: ${public_id} [${resource_type}]`);
-
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: folderName,
-        public_id,
-        resource_type,
-        timeout: 120000,
-      },
-      (error, result) => {
-        if (error) {
-          console.error('Cloudinary error details:', JSON.stringify(error, null, 2));
-          return reject(new Error(`Cloudinary upload failed: ${error.message}`));
-        }
-        cloudinary.api.resource(result.public_id, { resource_type })
-          .then(() => resolve({
-            url: result.secure_url,
-            public_id: result.public_id,
-            resource_type,
-          }))
-          .catch(err => {
-            console.error(`❌ Failed to verify uploaded file ${result.public_id}:`, err.message);
-            reject(err);
-          });
-      }
-    );
-    Readable.from(fileBuffer).pipe(uploadStream);
-  });
-};
-
-const calculateHalfPayment = (budget) => {
-  if (!budget) return 0;
-  const [min, max] = budget.replace('$', '').split('-').map((val) => parseFloat(val) || 0);
-  if (budget.includes('+')) return 2500;
-  return ((min + (max || min)) / 2) * 0.5;
-};
 
 const downloadOrder = async (req, res) => {
   try {
@@ -263,7 +195,7 @@ const downloadOrder = async (req, res) => {
       if (file.url && file.name) {
         try {
           const response = await axios.get(file.url, { responseType: 'arraybuffer' });
-          zip.addFile(file.name, Buffer.from(response.data)); 
+          zip.addFile(file.name, Buffer.from(response.data));
         } catch (error) {
           console.error(`Error fetching file ${file.name}:`, error.message);
         }
@@ -342,7 +274,7 @@ const completeOrder = async (req, res) => {
           resource_type: result.resource_type || 'raw',
         };
       } catch (error) {
-        console.error(`Cloudinary upload failed: ${file.originalname}`, error.message);
+        console.error(`❌ Cloudinary upload failed: ${file.originalname}`, error.message);
         return null;
       }
     });
@@ -371,6 +303,7 @@ const completeOrder = async (req, res) => {
         userId: order.user ? order.user._id.toString() : 'anonymous',
         fileMeta: JSON.stringify(fileMeta),
         message: message || '',
+        folderPath: folderName,
       },
     });
 
@@ -383,9 +316,9 @@ const completeOrder = async (req, res) => {
       await retryOperation(() =>
         sendOrderRemainingPaymentEmail(userEmail, userName, order.orderId, message, session.url)
       );
-      console.log(`Remaining payment email sent to ${userEmail} for order ${order.orderId}`);
+      console.log(`✅ Remaining payment email sent to ${userEmail} for order ${order.orderId}`);
     } catch (emailError) {
-      console.error(`Failed to send remaining payment email for order ${order.orderId}:`, emailError.message);
+      console.error(`❌ Failed to send remaining payment email for order ${order.orderId}:`, emailError.message);
     }
 
     res.status(200).json({

@@ -37,7 +37,7 @@ io.on('connection', (socket) => {
 });
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
-app.use('/api/stripe/webhook', stripeWebhookRouter);
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
@@ -49,7 +49,6 @@ app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/images', express.static('public/images'));
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err.message);
   res.status(500).json({ error: true, message: 'Internal server error', details: err.message });
