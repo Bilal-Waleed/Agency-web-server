@@ -189,7 +189,9 @@ const cancelOrderByAdmin = async (req, res) => {
     const userEmail = user?.email || order.email;
 
     if (order.files?.length > 0) {
-      const folderPrefix = order.files[0].public_id.split('/').slice(0, -1).join('/');
+      const publicId = order.files[0].public_id;
+      const parts = publicId.split('/');
+      const folderPrefix = parts.slice(0, 2).join('/');
       const resourceTypes = ['image', 'raw', 'video'];
       for (const type of resourceTypes) {
         try {
@@ -209,6 +211,7 @@ const cancelOrderByAdmin = async (req, res) => {
         console.warn("Failed to delete folder:", err.message);
       }
     }
+
 
     await sendAdminCancelOrderEmail(userEmail, userName, order.orderId, reason);
 
