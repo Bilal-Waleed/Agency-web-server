@@ -49,6 +49,10 @@ app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/images', express.static('public/images'));
 
+app.get('/', (req, res) => {
+  res.send('API is working 🚀');
+});
+
 app.use((err, req, res, next) => {
   console.error('Server error:', err.message);
   res.status(500).json({ error: true, message: 'Internal server error', details: err.message });
