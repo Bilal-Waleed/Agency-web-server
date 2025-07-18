@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { google } from 'googleapis';
+import fetch from 'node-fetch';
 
 dotenv.config();
 
@@ -150,30 +151,73 @@ const sendOrderRemainingPaymentEmail = async (email, name, orderId, message, pay
   await transporter.sendMail(mailOptions);
 };
 
-const sendOrderCompletedEmail = async (email, name, orderId, message, files) => {
-  const fileList = files.map((file) => `<li><a href="${file.url}">${file.name}</a></li>`).join('');
-  const mailOptions = {
-    from: `${process.env.EMAIL_USER}`,
-    to: email,
-    subject: 'Order Completed - Bold-Zyt Digital Solutions',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #2c3e50;">Dear ${name},</h2>
-        <p>We are pleased to inform you that your order (Order ID: ${orderId}) has been successfully completed!</p>
-        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
-        <p>Please find the delivered files below:</p>
-        <ul>${fileList}</ul>
-        <p>Thank you for choosing Bold-Zyt Digital Solutions. We hope you are satisfied with our services. If you have any feedback or need further assistance, please feel free to contact us.</p>
-        <p>Best regards,</p>
-        <p><strong>Bold-Zyt Digital Solutions Team</strong><br>
-        Email: boldzyt.ds@gmail.com<br>
-        Website: www.boldzytdigital.com</p>
-      </div>
-    `,
-  };
-
-  await transporter.sendMail(mailOptions);
+const mimeTypes = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  zip: 'application/zip',
 };
+
+const sendOrderCompletedEmail = async (email, name, orderId, message, files) => {
+  try {
+    const attachments = [];
+
+    for (const file of files || []) {
+      const { url, name, format } = file;
+      if (!url || !name) {
+        console.error(`Missing URL or name: ${JSON.stringify(file)}`);
+        continue;
+      }
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const ext = name.split('.').pop().toLowerCase();
+        const buffer = await res.buffer();
+        const contentType = mimeTypes[ext] || `application/${format || 'octet-stream'}`;
+
+        attachments.push({ filename: name, content: buffer, contentType });
+        console.log(`Attached: ${name}`);
+      } catch (err) {
+        console.error(`Failed to fetch ${name}:`, err.message);
+      }
+    }
+
+    const htmlBody = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Dear ${name},</h2>
+        <p>Your order (ID: ${orderId}) is now completed.</p>
+        ${message ? `<p><strong>Admin Message:</strong> ${message}</p>` : ''}
+        <p>
+          ${attachments.length > 0 ? 'Files are attached.' : files?.length ? '<strong>Note:</strong> Some files could not be attached. Contact us if needed.' : ''}
+        </p>
+        <p>Thank you for choosing Bold-Zyt Digital Solutions.</p>
+        <p>— Bold-Zyt Team<br>Email: boldzyt.ds@gmail.com<br>Website: www.boldzytdigital.com</p>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Order Completed - Bold-Zyt Digital Solutions',
+      html: htmlBody,
+      ...(attachments.length && { attachments }),
+    });
+
+    console.log(`Email sent to ${email} for order ${orderId}`);
+  } catch (error) {
+    console.error(`Email failed for order ${orderId}:`, error.message);
+    throw error;
+  }
+};
+
 
 const sendRegistrationEmail = async (email, name) => {
   const mailOptions = {

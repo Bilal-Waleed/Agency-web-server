@@ -208,7 +208,6 @@ const checkSession = async (req, res) => {
           console.error(`❌ Failed to delete files or folder from Cloudinary for order ${order.orderId}:`, cloudinaryError.message || 'Unknown error');
         }
 
-        // Emit Socket.IO event
         try {
           const io = req.app.get('io');
           if (!io) {
@@ -223,7 +222,6 @@ const checkSession = async (req, res) => {
 
         return res.status(200).json({ success: true, isRemainingPayment: true });
       } else if (orderData && tempId && userId) {
-        // Initial payment session
         return res.status(200).json({ success: true, isRemainingPayment: false });
       } else {
         console.error(`❌ Invalid session metadata:`, session.metadata);
