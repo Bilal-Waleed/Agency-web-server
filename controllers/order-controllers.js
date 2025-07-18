@@ -259,6 +259,7 @@ const finalizeOrder = async (req, res) => {
     const user = await User.findById(userId).select('name email avatar');
     if (!user) return res.status(404).send({ error: 'User not found' });
 
+    const tempFile = await TempFile.findById(tempId);
 
     const orderId = await generateOrderId();
     const timestamp = Date.now();
