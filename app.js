@@ -37,7 +37,7 @@ io.on('connection', (socket) => {
 });
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
-app.use('/api/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
