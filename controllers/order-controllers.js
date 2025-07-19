@@ -260,6 +260,9 @@ const finalizeOrder = async (req, res) => {
     if (!user) return res.status(404).send({ error: 'User not found' });
 
     const tempFile = await TempFile.findById(tempId);
+    if (!tempFile) {
+      return res.status(404).send({ error: 'Temporary file data not found' });
+    }
 
     const orderId = await generateOrderId();
     const timestamp = Date.now();
