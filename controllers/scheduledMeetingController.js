@@ -41,8 +41,8 @@ const deleteExpiredMeetings = async (io) => {
 const sendMeetingReminders = async (io) => {
   try {
     const now = new Date();
-    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000);
-    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000);
+    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000).toISOString();
 
     const upcomingMeetings = await ScheduledMeeting.find({
       status: { $in: ['accepted', 'rescheduled'] },
@@ -50,21 +50,31 @@ const sendMeetingReminders = async (io) => {
         $and: [
           {
             $gte: [
-              { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
-              inThirtyMinutes,
+              {
+                $dateFromString: {
+                  dateString: { $concat: ['$date', 'T', '$time'] },
+                  timezone: 'Asia/Karachi',
+                },
+              },
+              { $dateFromString: { dateString: inThirtyMinutes, timezone: 'Asia/Karachi' } },
             ],
           },
           {
             $lte: [
-              { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
-              fiveMinutesWindow,
+              {
+                $dateFromString: {
+                  dateString: { $concat: ['$date', 'T', '$time'] },
+                  timezone: 'Asia/Karachi',
+                },
+              },
+              { $dateFromString: { dateString: fiveMinutesWindow, timezone: 'Asia/Karachi' } },
             ],
           },
         ],
       },
     })
-      .populate('user', 'name email avatar')
-      .populate('service', 'title');
+    .populate('user', 'name email avatar')
+    .populate('service', 'title');
 
     for (const meeting of upcomingMeetings) {
       try {
