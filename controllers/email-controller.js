@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
+import moment from 'moment-timezone';
 
 dotenv.config();
 
@@ -30,17 +31,23 @@ const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
 const generateGoogleMeetLink = async (meetingDetails) => {
   try {
+    const startDateTime = moment.tz(
+      `${meetingDetails.date}T${meetingDetails.time}`,
+      'YYYY-MM-DDTHH:mm',
+      'Asia/Karachi'
+    );
+
+    const endDateTime = startDateTime.clone().add(1, 'hour');
+
     const event = {
       summary: `Meeting with ${meetingDetails.userName} - Bold-Zyt Digital Solutions`,
       description: `Service: ${meetingDetails.serviceTitle}\nScheduled meeting with ${meetingDetails.userName}`,
       start: {
-        dateTime: new Date(`${meetingDetails.date}T${meetingDetails.time}`).toISOString(),
+        dateTime: startDateTime.format(),
         timeZone: 'Asia/Karachi',
       },
       end: {
-        dateTime: new Date(
-          new Date(`${meetingDetails.date}T${meetingDetails.time}`).getTime() + 60 * 60 * 1000
-        ).toISOString(),
+        dateTime: endDateTime.format(),
         timeZone: 'Asia/Karachi',
       },
       conferenceData: {
@@ -49,17 +56,22 @@ const generateGoogleMeetLink = async (meetingDetails) => {
           conferenceSolutionKey: { type: 'hangoutsMeet' },
         },
       },
-      attendees: [{ email: meetingDetails.userEmail }, { email: process.env.EMAIL_USER }],
+      attendees: [
+        { email: meetingDetails.userEmail },
+        { email: process.env.EMAIL_USER },
+      ],
     };
 
-    const response = calendar.events.insert({
+    const response = await calendar.events.insert({
       calendarId: 'primary',
       resource: event,
       conferenceDataVersion: 1,
       sendUpdates: 'none',
     });
 
-    return response.data.hangoutLink;
+    console.log(`Event created: ${response.data.id}`);
+
+    return response.data.hangoutLink || 'No Meet link generated';
   } catch (error) {
     console.error('Error generating Google Meet link:', error.message);
     throw error;
