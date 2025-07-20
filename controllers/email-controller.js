@@ -52,7 +52,7 @@ const generateGoogleMeetLink = async (meetingDetails) => {
       attendees: [{ email: meetingDetails.userEmail }, { email: process.env.EMAIL_USER }],
     };
 
-    const response = await calendar.events.insert({
+    const response = calendar.events.insert({
       calendarId: 'primary',
       resource: event,
       conferenceDataVersion: 1,
