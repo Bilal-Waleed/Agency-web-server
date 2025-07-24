@@ -48,7 +48,7 @@ app.use('/api/services', serviceRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
-app.use('/google-meet', googleMeetRoute);
+app.use('/', googleMeetRoute);
 app.use('/images', express.static('public/images'));
 
 app.get('/', (req, res) => {
