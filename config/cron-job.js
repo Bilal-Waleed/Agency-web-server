@@ -8,7 +8,7 @@ export const startCronJob = (io) => {
   cron.schedule('*/10 * * * *', async () => {
     console.log('Checking for upcoming meetings...');
     try {
-      const count = await sendMeetingReminders(io);
+      const count = await sendMeetingReminders();
       console.log(`Processed ${count} meeting reminders`);
     } catch (error) {
       console.error('Error processing meeting reminders:', error.message);

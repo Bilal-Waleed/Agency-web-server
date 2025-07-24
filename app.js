@@ -50,7 +50,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/images', express.static('public/images'));
 
 app.get('/', (req, res) => {
-  res.send('API is working 🚀');
+  res.send('API is working ');
 });
 
 app.use((err, req, res, next) => {

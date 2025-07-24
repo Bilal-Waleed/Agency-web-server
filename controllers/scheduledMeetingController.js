@@ -38,7 +38,7 @@ const deleteExpiredMeetings = async (io) => {
   }
 };
 
-const sendMeetingReminders = async (io) => {
+const sendMeetingReminders = async () => {
   try {
     const now = new Date();
     const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000).toISOString().replace('Z', '');

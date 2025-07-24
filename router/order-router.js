@@ -3,8 +3,7 @@ import { orderForm, getUserOrders, createCheckoutSession, finalizeOrder, checkSe
 import { getUserCancelRequests } from '../controllers/cancel-request-controller.js';
 import multer from 'multer';
 import authMiddleware from '../middleware/authMiddleware.js';
-
-const upload = multer({ storage: multer.memoryStorage() });
+import { upload } from '../config/multer.js';
 
 const router = express.Router();
 
