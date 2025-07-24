@@ -13,6 +13,7 @@ import adminRouter from './router/admin-router.js';
 import scheduledMeetingRouter from './router/scheduledMeeting-router.js';
 import notificationRoutes from './router/notificationRoutes.js';
 import stripeWebhookRouter from './config/stripe-webhook.js'
+import googleMeetRoute from './router/googleMeetRoute.js';
 
 dotenv.config();
 const app = express();
@@ -47,11 +48,12 @@ app.use('/api/services', serviceRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
+app.use('/google-meet', googleMeetRoute);
 app.use('/images', express.static('public/images'));
 
 app.get('/', (req, res) => {
   res.send('API is working 🚀');
-});
+});x
 
 app.use((err, req, res, next) => {
   console.error('Server error:', err.message);
