@@ -102,6 +102,16 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
+    // Truncate projectDescription to ensure metadata is under 500 characters
+    const maxMetadataLength = 500;
+    let truncatedOrderData = { ...orderData };
+    const serializedOrderData = JSON.stringify(truncatedOrderData);
+    if (serializedOrderData.length > maxMetadataLength) {
+      const overhead = JSON.stringify({ ...orderData, projectDescription: '' }).length + 20;
+      const maxDescriptionLength = maxMetadataLength - overhead;
+      truncatedOrderData.projectDescription = orderData.projectDescription.slice(0, maxDescriptionLength);
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -121,7 +131,7 @@ const createCheckoutSession = async (req, res) => {
       cancel_url: `${process.env.FRONTEND_URL}/order`,
       metadata: {
         userId: decoded.userID,
-        orderData: JSON.stringify(orderData),
+        orderData: JSON.stringify(truncatedOrderData),
         tempId,
       },
     });
@@ -325,7 +335,7 @@ const finalizeOrder = async (req, res) => {
               failedFiles.push(file.name);
               return null;
             }
-            const fileBuffer = Buffer.from(await response.arrayBuffer()); // Updated to arrayBuffer
+            const fileBuffer = Buffer.from(await response.arrayBuffer());
 
             console.log(`🔄 Uploading file to: ${newPublicId} [${resource.resource_type}]`);
             const uploadResult = await retryOperation(() =>

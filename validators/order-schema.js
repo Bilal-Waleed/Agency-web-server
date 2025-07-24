@@ -17,7 +17,7 @@ const orderSchema = z.object({
     timeline: z.string().refine(val => new Date(val) > new Date(), {
         message: 'Timeline must be in the future'
     }),
-    projectDescription: z.string().min(10, 'Project description must be at least 10 characters').max(5000, 'Project description must be less than 5000 characters'),
+    projectDescription: z.string().min(10, 'Project description must be at least 10 characters').max(499, 'Project description must be less than 499 characters'),
     paymentReference: z.string().min(1, 'Payment reference is required'),
     paymentMethod: z.enum(['JazzCash', 'Bank Transfer', 'Stripe'], {
         errorMap: () => ({ message: 'Payment method is required' })

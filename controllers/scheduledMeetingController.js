@@ -41,8 +41,8 @@ const deleteExpiredMeetings = async (io) => {
 const sendMeetingReminders = async (io) => {
   try {
     const now = new Date();
-    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
-    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000).toISOString();
+    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000).toISOString().replace('Z', '');
+    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000).toISOString().replace('Z', '');
 
     const upcomingMeetings = await ScheduledMeeting.find({
       status: { $in: ['accepted', 'rescheduled'] },
