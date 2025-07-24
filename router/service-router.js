@@ -4,7 +4,7 @@ import {
   getServiceById,
   createService,
 } from '../controllers/service-controllers.js';
-import {  imageUpload } from '../config/multer.js';
+import { imageUpload } from '../config/multer.js';
 
 const router = express.Router();
 

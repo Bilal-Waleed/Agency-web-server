@@ -1,7 +1,6 @@
 import express from 'express';
 import { orderForm, getUserOrders, createCheckoutSession, finalizeOrder, checkSession } from '../controllers/order-controllers.js';
 import { getUserCancelRequests } from '../controllers/cancel-request-controller.js';
-import multer from 'multer';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { upload } from '../config/multer.js';
 

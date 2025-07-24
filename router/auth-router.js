@@ -10,6 +10,7 @@ import {
   UserCheck,
   VerifyOTP,
 } from "../controllers/auth-controllers.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -21,6 +22,6 @@ router.post("/google-login", GoogleLogin);
 router.post("/verify-otp", VerifyOTP);
 router.post("/forgot-password", ForgotPassword);
 router.post("/reset-password", ResetPassword);
-router.get("/user", UserCheck);
+router.get("/user", authMiddleware, UserCheck);
 
 export default router;
