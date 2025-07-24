@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  'https://developers.google.com/oauthplayground'
+  // 'https://developers.google.com/oauthplayground' 
 );
 
 oauth2Client.setCredentials({
@@ -69,11 +69,10 @@ const generateGoogleMeetLink = async (meetingDetails) => {
       sendUpdates: 'none',
     });
 
-    console.log(`Event created: ${response.data.id}`);
-
+    console.log(`✅ Event created: ${response.data.id}`);
     return response.data.hangoutLink || 'No Meet link generated';
   } catch (error) {
-    console.error('Error generating Google Meet link:', error.message);
+    console.error('❌ Error generating Google Meet link:', error.message);
     throw error;
   }
 };
