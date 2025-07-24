@@ -28,16 +28,9 @@ const io = new Server(server, {
 
 app.set('io', io);
 
-io.on('connection', (socket) => {
-  console.log('A client connected:', socket.id);
-  socket.join('adminRoom');
-  socket.on('disconnect', () => {
-    console.log('A client disconnected:', socket.id);
-  });
-});
-
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use('/api/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
+
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
@@ -47,7 +40,6 @@ app.use('/api/services', serviceRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/scheduled-meetings', scheduledMeetingRouter);
 app.use('/api/notifications', notificationRoutes);
-app.use('/images', express.static('public/images'));
 
 app.get('/', (req, res) => {
   res.send('API is working ');

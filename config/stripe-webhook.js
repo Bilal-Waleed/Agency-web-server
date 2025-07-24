@@ -34,7 +34,7 @@ router.post(
       if (orderData && tempId) {
         const existingOrder = await Order.findOne({ 'sessionId': session.id }); 
         if (existingOrder) {
-          console.log(`ℹ️ Order for session ${session.id} already processed, skipping`);
+          console.log(`Order for session ${session.id} already processed, skipping`);
           return res.status(200).json({ received: true });
         }
 
@@ -58,7 +58,7 @@ router.post(
       } else if (orderId && fileMeta) {
         const order = await Order.findById(orderId);
         if (order && order.status === 'completed') {
-          console.log(`ℹ️ Order ${orderId} already completed, skipping processing`);
+          console.log(`Order ${orderId} already completed, skipping processing`);
           return res.status(200).json({ received: true });
         }
 
