@@ -53,7 +53,7 @@ app.use('/images', express.static('public/images'));
 
 app.get('/', (req, res) => {
   res.send('API is working 🚀');
-});x
+});
 
 app.use((err, req, res, next) => {
   console.error('Server error:', err.message);
