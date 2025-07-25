@@ -46,21 +46,21 @@ const checkSession = async (req, res) => {
           await completeOrderProcessing(orderId, fileMeta, message, req.app.get('io'), folderPath);
           return res.status(200).json({ success: true, isRemainingPayment: true });
         } catch (error) {
-          console.error(`❌ Failed to process order ${orderId}:`, error.message);
+          console.error(`Failed to process order ${orderId}:`, error.message);
           return res.status(500).json({ error: error.message, isRemainingPayment: true });
         }
       } else if (orderData && tempId && userId) {
         return res.status(200).json({ success: true, isRemainingPayment: false });
       } else {
-        console.error(`❌ Invalid session metadata:`, session.metadata);
+        console.error(`Invalid session metadata:`, session.metadata);
         return res.status(400).json({ error: 'Invalid session metadata', isRemainingPayment: false });
       }
     } else {
-      console.error(`❌ Session not completed or not paid: ${session.status}, ${session.payment_status}`);
+      console.error(`Session not completed or not paid: ${session.status}, ${session.payment_status}`);
       return res.status(400).json({ error: 'Payment not completed', isRemainingPayment: false });
     }
   } catch (error) {
-    console.error(`❌ Error checking session ${sessionId}:`, error.message);
+    console.error(`Error checking session ${sessionId}:`, error.message);
     return res.status(500).json({ error: 'Internal Server Error', isRemainingPayment: false });
   }
 };
@@ -102,7 +102,6 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Truncate projectDescription to ensure metadata is under 500 characters
     const maxMetadataLength = 500;
     let truncatedOrderData = { ...orderData };
     const serializedOrderData = JSON.stringify(truncatedOrderData);
@@ -178,23 +177,23 @@ const orderForm = async (req, res) => {
       return res.status(400).send({ error: 'File size exceeds limit (25MB per file or total)' });
     }
 
-    console.log('ℹ️ Received files:', JSON.stringify(files.map(f => ({ name: f.originalname, mimetype: f.mimetype, size: f.size })), null, 2));
+    console.log('Received files:', JSON.stringify(files.map(f => ({ name: f.originalname, mimetype: f.mimetype, size: f.size })), null, 2));
 
     const timestamp = Date.now();
     const tempFolder = `temp_orders/${user.name.replace(/\s+/g, '_')}_${timestamp}`;
     const fileUploads = files.map(async (file) => {
       if (file.mimetype === 'application/json') {
-        console.warn(`❌ Skipping unsupported file type: ${file.originalname}`);
+        console.warn(`Skipping unsupported file type: ${file.originalname}`);
         return null;
       }
 
       try {
         const safeFileName = file.originalname.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-        console.log(`ℹ️ Uploading file: ${safeFileName} (${file.size} bytes) to folder: ${tempFolder}`);
+        console.log(`Uploading file: ${safeFileName} (${file.size} bytes) to folder: ${tempFolder}`);
         const result = await retryOperation(() =>
           uploadToCloudinary(file.buffer, tempFolder, file.mimetype, safeFileName)
         );
-        console.log(`✅ Uploaded file: ${safeFileName}, public_id: ${result.public_id}, url: ${result.url}`);
+        console.log(`Uploaded file: ${safeFileName}, public_id: ${result.public_id}, url: ${result.url}`);
 
         return {
           name: file.originalname,
@@ -204,14 +203,14 @@ const orderForm = async (req, res) => {
           resource_type: result.resource_type,
         };
       } catch (error) {
-        console.error(`❌ Cloudinary upload failed for ${file.originalname}:`, error.message);
+        console.error(`Cloudinary upload failed for ${file.originalname}:`, error.message);
         return null;
       }
     });
 
     const fileMeta = (await Promise.all(fileUploads)).filter(Boolean);
     if (!fileMeta.length && files.length > 0) {
-      console.warn('⚠️ No files were uploaded successfully to Cloudinary');
+      console.warn('No files were uploaded successfully to Cloudinary');
       return res.status(500).send({
         error: 'Failed to upload files to Cloudinary',
         details: 'All file uploads failed, possibly due to network issues or Cloudinary configuration. Please try again or contact support.',
@@ -224,7 +223,7 @@ const orderForm = async (req, res) => {
       files: fileMeta,
       createdAt: new Date(),
     });
-    console.log('ℹ️ Saving TempFile with metadata:', JSON.stringify(tempFile, null, 2));
+    console.log('Saving TempFile with metadata:', JSON.stringify(tempFile, null, 2));
     await tempFile.save();
 
     res.status(200).send({
@@ -277,8 +276,8 @@ const finalizeOrder = async (req, res) => {
     const orderId = await generateOrderId();
     const timestamp = Date.now();
     const permanentFolder = `orders/${user.name.replace(/\s+/g, '_')}_${timestamp}`;
-    console.log('🗂️ permanentFolder:', permanentFolder);
-    console.log('📁 Moving files from:', tempFile.tempFolder, '➜', permanentFolder);
+    console.log('permanentFolder:', permanentFolder);
+    console.log('Moving files from:', tempFile.tempFolder, '➜', permanentFolder);
 
     const getResourceType = (mime) => {
       if (mime.startsWith('image/')) return 'image';
@@ -303,8 +302,8 @@ const finalizeOrder = async (req, res) => {
             const safeFileName = file.name.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
             const newPublicId = `${permanentFolder}/${safeFileName.split('.').slice(0, -1).join('.')}`;
 
-            console.log('📄 oldPublicId:', oldPublicId);
-            console.log(`ℹ️ Using resource_type: ${file.resource_type || getResourceType(file.type)} for file ${file.name} (MIME: ${file.type})`);
+            console.log('oldPublicId:', oldPublicId);
+            console.log(`Using resource_type: ${file.resource_type || getResourceType(file.type)} for file ${file.name} (MIME: ${file.type})`);
 
             let resource;
             try {
@@ -314,9 +313,9 @@ const finalizeOrder = async (req, res) => {
                   timeout: 120000,
                 })
               );
-              console.log(`✅ File ${oldPublicId} exists with resource_type: ${resource.resource_type}`);
+              console.log(`File ${oldPublicId} exists with resource_type: ${resource.resource_type}`);
             } catch (error) {
-              console.error(`❌ File ${oldPublicId} does not exist in Cloudinary:`, error.message);
+              console.error(`File ${oldPublicId} does not exist in Cloudinary:`, error.message);
               failedFiles.push(file.name);
               return null;
             }
@@ -325,29 +324,29 @@ const finalizeOrder = async (req, res) => {
               resource_type: resource.resource_type,
               secure: true,
             });
-            console.log(`ℹ️ Fetching file content from: ${fileUrl}`);
+            console.log(`Fetching file content from: ${fileUrl}`);
 
             const response = await retryOperation(() =>
               fetch(fileUrl, { signal: AbortSignal.timeout(120000) })
             );
             if (!response.ok) {
-              console.error(`❌ Failed to fetch file ${oldPublicId}: ${response.statusText}`);
+              console.error(`Failed to fetch file ${oldPublicId}: ${response.statusText}`);
               failedFiles.push(file.name);
               return null;
             }
             const fileBuffer = Buffer.from(await response.arrayBuffer());
 
-            console.log(`🔄 Uploading file to: ${newPublicId} [${resource.resource_type}]`);
+            console.log(`Uploading file to: ${newPublicId} [${resource.resource_type}]`);
             const uploadResult = await retryOperation(() =>
               uploadToCloudinary(fileBuffer, permanentFolder, file.type, safeFileName)
             );
 
-            console.log(`🗑️ Deleting original file: ${oldPublicId} [${resource.resource_type}]`);
+            console.log(`Deleting original file: ${oldPublicId} [${resource.resource_type}]`);
             await retryOperation(() =>
               cloudinary.uploader.destroy(oldPublicId, { resource_type: resource.resource_type })
             );
 
-            console.log(`✅ File transferred successfully: ${oldPublicId} -> ${newPublicId}`);
+            console.log(`File transferred successfully: ${oldPublicId} -> ${newPublicId}`);
 
             return {
               name: file.name,
@@ -357,7 +356,7 @@ const finalizeOrder = async (req, res) => {
               resource_type: uploadResult.resource_type,
             };
           } catch (error) {
-            console.error(`❌ Failed to transfer file ${file.name}:`, error.message);
+            console.error(`Failed to transfer file ${file.name}:`, error.message);
             failedFiles.push(file.name);
             return null;
           }
@@ -378,7 +377,7 @@ const finalizeOrder = async (req, res) => {
     });
 
     await order.save();
-    console.log(`✅ Order saved with ID: ${orderId}`);
+    console.log(`Order saved with ID: ${orderId}`);
 
     if (tempFile.files.length > 0 && fileMeta.length === tempFile.files.length) {
       try {
@@ -397,30 +396,30 @@ const finalizeOrder = async (req, res) => {
             await retryOperation(() =>
               cloudinary.uploader.destroy(resource.public_id, { resource_type: resource.resource_type })
             );
-            console.log(`✅ Deleted residual file: ${resource.public_id} [${resource.resource_type}]`);
+            console.log(`Deleted residual file: ${resource.public_id} [${resource.resource_type}]`);
           }
         }
 
         await retryOperation(() => cloudinary.api.delete_folder(tempFile.tempFolder));
-        console.log(`✅ Temporary folder deleted from Cloudinary: ${tempFile.tempFolder}`);
+        console.log(`Temporary folder deleted from Cloudinary: ${tempFile.tempFolder}`);
       } catch (error) {
-        console.error(`❌ Failed to delete temporary folder ${tempFile.tempFolder} from Cloudinary:`, error.message || 'Unknown error');
+        console.error(`Failed to delete temporary folder ${tempFile.tempFolder} from Cloudinary:`, error.message || 'Unknown error');
       }
 
       try {
         const deletedTempFile = await TempFile.findByIdAndDelete(tempId);
         if (deletedTempFile) {
-          console.log(`✅ Temporary files deleted for tempId: ${tempId}`);
+          console.log(`Temporary files deleted for tempId: ${tempId}`);
         } else {
-          console.warn(`⚠️ No TempFile found for tempId: ${tempId}`);
+          console.warn(` No TempFile found for tempId: ${tempId}`);
         }
       } catch (error) {
-        console.error(`❌ Failed to delete TempFile ${tempId}:`, error.message);
+        console.error(`Failed to delete TempFile ${tempId}:`, error.message);
       }
     } else if (tempFile.files.length === 0) {
-      console.log(`ℹ️ No files in TempFile, skipping temporary folder deletion`);
+      console.log(`No files in TempFile, skipping temporary folder deletion`);
     } else {
-      console.warn(`⚠️ Temporary folder ${tempFile.tempFolder} not deleted due to incomplete file transfers`);
+      console.warn(`Temporary folder ${tempFile.tempFolder} not deleted due to incomplete file transfers`);
     }
 
     try {
@@ -430,9 +429,9 @@ const finalizeOrder = async (req, res) => {
         orderId,
         initialPayment: session.amount_total / 100,
       }));
-      console.log('✅ Order confirmation email sent successfully');
+      console.log('Order confirmation email sent successfully');
     } catch (emailError) {
-      console.error(`❌ Failed to send order confirmation email:`, emailError.message);
+      console.error(`Failed to send order confirmation email:`, emailError.message);
       return res.status(200).send({
         message: 'Order submitted successfully, but failed to send confirmation email',
         orderId,
