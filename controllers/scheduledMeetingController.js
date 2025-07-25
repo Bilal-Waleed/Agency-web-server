@@ -259,6 +259,15 @@ const getScheduledMeetings = async (req, res) => {
       data: formattedMeetings,
       totalPages,
     });
+
+    const io = req.app.get('io');
+    if (io && typeof io.to === 'function') {
+      await deleteExpiredMeetings(io);
+    } else {
+      console.warn('Socket.IO instance not available, skipping deleteExpiredMeetings');
+      await deleteExpiredMeetings();
+    }
+    
   } catch (error) {
     if (!res.headersSent) {
       res.status(500).send({
