@@ -5,7 +5,7 @@ import cloudinary from '../config/cloudinary.js';
 import { retryOperation } from '../utils/cloudinary.js';
 
 export const startCronJob = (io) => {
-  cron.schedule('*/10 * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     console.log('Checking for upcoming meetings...');
     try {
       const count = await sendMeetingReminders();

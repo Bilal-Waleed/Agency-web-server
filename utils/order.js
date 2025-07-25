@@ -16,7 +16,7 @@ export const completeOrderProcessing = async (orderId, fileMeta, message, io, fo
   }
 
   if (order.status === 'completed') {
-    console.log(`ℹ️ Order ${order.orderId} already completed`);
+    console.log(`Order ${order.orderId} already completed`);
     return;
   }
 
@@ -47,19 +47,19 @@ export const completeOrderProcessing = async (orderId, fileMeta, message, io, fo
       paymentStatus: 'full_paid',
       remainingPaymentSessionId: null,
     });
-    console.log(`✅ Order ${order.orderId} updated to completed`);
+    console.log(`Order ${order.orderId} updated to completed`);
 
     await retryOperation(() =>
       sendOrderCompletedEmail(userEmail, userName, order.orderId, message, parsedFileMeta)
     );
-    console.log(`✅ Email sent to ${userEmail} for order ${order.orderId}`);
+    console.log(`Email sent to ${userEmail} for order ${order.orderId}`);
 
     for (const file of parsedFileMeta) {
       if (file.public_id) {
         await retryOperation(() =>
           cloudinary.uploader.destroy(file.public_id, { resource_type: file.resource_type || 'auto' })
         );
-        console.log(`✅ Deleted file from Cloudinary: ${file.public_id}`);
+        console.log(`Deleted file from Cloudinary: ${file.public_id}`);
       }
     }
 
@@ -67,16 +67,16 @@ export const completeOrderProcessing = async (orderId, fileMeta, message, io, fo
       const folder = folderPath || parsedFileMeta[0]?.public_id?.substring(0, parsedFileMeta[0].public_id.lastIndexOf('/'));
       if (folder) {
         await retryOperation(() => cloudinary.api.delete_folder(folder));
-        console.log(`✅ Deleted folder from Cloudinary: ${folder}`);
+        console.log(`Deleted folder from Cloudinary: ${folder}`);
       }
     }
 
     if (io) {
       io.to('adminRoom').emit('orderCompleted', { orderId: order.orderId });
-      console.log(`✅ Emitted orderCompleted event for ${order.orderId}`);
+      console.log(`Emitted orderCompleted event for ${order.orderId}`);
     }
   } catch (error) {
-    console.error(`❌ Error in completeOrderProcessing for order ${orderId}:`, error.message, error);
+    console.error(`Error in completeOrderProcessing for order ${orderId}:`, error.message, error);
     throw new Error(`Failed to complete order processing: ${error.message}`);
   }
 };

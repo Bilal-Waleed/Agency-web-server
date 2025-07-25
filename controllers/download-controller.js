@@ -274,7 +274,7 @@ const completeOrder = async (req, res) => {
           resource_type: result.resource_type || 'raw',
         };
       } catch (error) {
-        console.error(`❌ Cloudinary upload failed: ${file.originalname}`, error.message);
+        console.error(`Cloudinary upload failed: ${file.originalname}`, error.message);
         return null;
       }
     });
@@ -316,9 +316,9 @@ const completeOrder = async (req, res) => {
       await retryOperation(() =>
         sendOrderRemainingPaymentEmail(userEmail, userName, order.orderId, message, session.url)
       );
-      console.log(`✅ Remaining payment email sent to ${userEmail} for order ${order.orderId}`);
+      console.log(`Remaining payment email sent to ${userEmail} for order ${order.orderId}`);
     } catch (emailError) {
-      console.error(`❌ Failed to send remaining payment email for order ${order.orderId}:`, emailError.message);
+      console.error(`Failed to send remaining payment email for order ${order.orderId}:`, emailError.message);
     }
 
     res.status(200).json({

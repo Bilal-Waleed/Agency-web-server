@@ -7,7 +7,7 @@ export const retryOperation = async (operation, retries = 3, delay = 1000) => {
       return await operation();
     } catch (error) {
       if (attempt === retries) throw error;
-      console.warn(`⚠️ Attempt ${attempt} failed: ${error.message}. Retrying...`);
+      console.warn(`Attempt ${attempt} failed: ${error.message}. Retrying...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -32,7 +32,7 @@ export const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) =
     const safeFileName = fileName.replace(/\.+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
     const public_id = `${folderName}/${safeFileName.split('.').slice(0, -1).join('.')}`;
 
-    console.log(`ℹ️ Uploading to Cloudinary: ${public_id} [${resource_type}]`);
+    console.log(`Uploading to Cloudinary: ${public_id} [${resource_type}]`);
 
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder: folderName, public_id, resource_type, timeout: 120000 },
@@ -44,7 +44,7 @@ export const uploadToCloudinary = (fileBuffer, folderName, mimetype, fileName) =
         cloudinary.api.resource(result.public_id, { resource_type })
           .then(() => resolve({ url: result.secure_url, public_id: result.public_id, resource_type }))
           .catch(err => {
-            console.error(`❌ Failed to verify uploaded file ${result.public_id}:`, err.message);
+            console.error(`Failed to verify uploaded file ${result.public_id}:`, err.message);
             reject(err);
           });
       }

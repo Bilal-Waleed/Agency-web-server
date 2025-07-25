@@ -69,10 +69,10 @@ const generateGoogleMeetLink = async (meetingDetails) => {
       sendUpdates: 'none',
     });
 
-    console.log(`✅ Event created: ${response.data.id}`);
+    console.log(`Event created: ${response.data.id}`);
     return response.data.hangoutLink || 'No Meet link generated';
   } catch (error) {
-    console.error('❌ Error generating Google Meet link:', error.message);
+    console.error('Error generating Google Meet link:', error.message);
     throw error;
   }
 };
