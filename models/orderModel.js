@@ -97,7 +97,7 @@ const orderSchema = new mongoose.Schema(
     },
     tempFolder: {
       type: String,
-      required: false, // Store temporary Cloudinary folder path
+      required: false, 
     },
   },
   { timestamps: true }

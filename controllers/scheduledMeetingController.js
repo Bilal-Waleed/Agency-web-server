@@ -16,7 +16,7 @@ const deleteExpiredMeetings = async (io) => {
     const expiredMeetings = await ScheduledMeeting.find({
       $expr: {
         $lt: [
-          { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] } } },
+          { $dateFromString: { dateString: { $concat: ['$date', 'T', '$time'] }, timezone: 'Asia/Karachi' } },
           oneHourAgo,
         ],
       },
