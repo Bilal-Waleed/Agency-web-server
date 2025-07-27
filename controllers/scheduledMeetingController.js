@@ -1,5 +1,6 @@
 import ScheduledMeeting from '../models/scheduledMeetingModel.js';
 import User from '../models/userModel.js';
+import moment from 'moment-timezone';
 import {
   sendScheduledMeetingEmail,
   sendMeetingAcceptedEmail,
@@ -40,9 +41,9 @@ const deleteExpiredMeetings = async (io) => {
 
 const sendMeetingReminders = async () => {
   try {
-    const now = new Date();
-    const inThirtyMinutes = new Date(now.getTime() + 30 * 60 * 1000).toISOString().replace('Z', '');
-    const fiveMinutesWindow = new Date(now.getTime() + 35 * 60 * 1000).toISOString().replace('Z', '');
+    const now = moment().tz('Asia/Karachi');
+    const inThirtyMinutes = moment(now).add(30, 'minutes').toDate();
+    const fiveMinutesWindow = moment(now).add(35, 'minutes').toDate();
 
     const upcomingMeetings = await ScheduledMeeting.find({
       status: { $in: ['accepted', 'rescheduled'] },
@@ -56,7 +57,7 @@ const sendMeetingReminders = async () => {
                   timezone: 'Asia/Karachi',
                 },
               },
-              { $dateFromString: { dateString: inThirtyMinutes, timezone: 'Asia/Karachi' } },
+              inThirtyMinutes,
             ],
           },
           {
@@ -67,14 +68,20 @@ const sendMeetingReminders = async () => {
                   timezone: 'Asia/Karachi',
                 },
               },
-              { $dateFromString: { dateString: fiveMinutesWindow, timezone: 'Asia/Karachi' } },
+              fiveMinutesWindow,
             ],
           },
         ],
       },
     })
-    .populate('user', 'name email avatar')
-    .populate('service', 'title');
+      .populate('user', 'name email avatar')
+      .populate('service', 'title');
+
+    console.log('Found meetings:', upcomingMeetings.map(m => ({
+      id: m._id,
+      date: m.date,
+      time: m.time,
+    })));
 
     for (const meeting of upcomingMeetings) {
       try {
@@ -96,7 +103,7 @@ const sendMeetingReminders = async () => {
           meetLink
         );
 
-        console.log(`Reminder sent for meeting ${meeting._id}`);
+        console.log(`Reminder sent for meeting ${meeting._id} at ${moment().toString()}`);
       } catch (error) {
         console.error(`Failed to send reminder for meeting ${meeting._id}:`, error.message);
       }
